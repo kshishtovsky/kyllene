@@ -436,7 +436,8 @@
 
         <service
             android:name=".assist.HeraldRecognitionService"
-            android:exported="true">
+            android:exported="true"
+            android:permission="android.permission.BIND_RECOGNITION_SERVICE">
             <intent-filter>
                 <action android:name="android.speech.RecognitionService" />
             </intent-filter>

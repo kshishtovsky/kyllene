@@ -74,6 +74,17 @@ class GatewayProbeTest {
         assertEquals(404, result.httpStatus)
     }
 
+    /** A dead tunnel behind a live proxy: nginx answers 502 with its own page, and that names the tunnel, not the port. */
+    @Test
+    fun proxyUpstreamErrorIsNotAWrongPort() = runTest {
+        val engine = MockEngine { respond("<html><h1>502 Bad Gateway</h1></html>", HttpStatusCode.BadGateway) }
+        val result = assertIs<ProbeResult.ProxyFailed>(probeWith(engine).probe(url))
+        assertEquals(502, result.httpStatus)
+        val stage = result.toStageResult()
+        assertIs<StageResult.Failed>(stage)
+        assertTrue(stage.problem.contains("nothing answered behind it"))
+    }
+
     @Test
     fun connectionFailureIsUnreachable() = runTest {
         val engine = MockEngine { throw IllegalStateException("Connection refused") }

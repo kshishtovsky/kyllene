@@ -112,7 +112,10 @@ class GatewayConnection(
                     _state.value = ConnectionState.SessionExpired
                     return
                 }
-                is ApiResult.Unavailable -> null.also { backoff(attempt, "Can't reach gateway: ${result.message}") }
+                // 5xx means the proxy answered and the gateway behind it did not: that is not a dead radio.
+                is ApiResult.Unavailable -> null.also {
+                    backoff(attempt, if (result.fromServer) "Gateway unreachable: ${result.message}" else "Can't reach gateway: ${result.message}")
+                }
                 ApiResult.RateLimited -> null.also { backoff(attempt, "Rate limited by gateway") }
                 is ApiResult.Failed -> null.also { backoff(attempt, result.message) }
                 ApiResult.InvalidCredentials -> null.also { backoff(attempt, "Not signed in") }

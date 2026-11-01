@@ -172,7 +172,8 @@ internal fun ConnectView(
         // With a keyboard, the page opens ready for the address to be typed.
         val urlFocus = remember { FocusRequester() }
         if (isDesktop) LaunchedEffect(Unit) { urlFocus.requestFocus() }
-        val signInReady = result is ProbeResult.Reachable && result.status.authRequired && result.canSignIn
+        val exposed = result is ProbeResult.Reachable && result.url.isExposed
+        val signInReady = result is ProbeResult.Reachable && result.status.authRequired && result.canSignIn && !exposed
         // The address as it was when tested: Enter again on it, unchanged, goes on to sign in.
         var testedAs by remember { mutableStateOf<String?>(null) }
         val test = {
@@ -210,10 +211,11 @@ internal fun ConnectView(
             }
         }
 
-        if (result is ProbeResult.Reachable && result.url.isExposed) {
+        if (exposed) {
             Text(
-                "This address isn't private and doesn't use https://, so your password and chats would cross " +
-                    "the internet unencrypted. Use https://, Tailscale or your own network instead.",
+                "This address is public and doesn't use https://, so your password and every chat would cross the " +
+                    "internet unencrypted. Signing in is blocked: put the gateway behind https (a domain with a " +
+                    "certificate on your proxy) or reach it over Tailscale.",
                 style = Theme[typography][bodySmall],
                 color = Theme[colors][danger],
             )

@@ -128,7 +128,8 @@ class ConnectViewModel(
 
     /** Typing invalidates the previous result, and looks up what the new address already has picked or saved. */
     fun onUrlEdited() {
-        if (_state.value.result != null || _state.value.urlError != null || _state.value.accessError != null) {
+        // A probe still running belongs to the old text: left alone, its answer would be taken for this address.
+        if (_state.value.testing || _state.value.result != null || _state.value.urlError != null || _state.value.accessError != null) {
             probeJob?.cancel()
             _state.value = ConnectUiState()
         }

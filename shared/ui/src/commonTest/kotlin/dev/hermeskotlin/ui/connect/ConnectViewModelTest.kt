@@ -51,12 +51,15 @@ class ConnectViewModelTest {
     private fun viewModel(
         certs: ClientCertAliases = ClientCertAliases(),
         gateways: GatewayRepository = GatewayRepository(InMemoryKeyValueStore()),
+        waitMs: Long = 0,
     ): ConnectViewModel {
         // On the test dispatcher, so no request is still finishing on another thread when a test ends.
         val config = MockEngineConfig()
         config.dispatcher = dispatcher
         config.addHandler { request ->
             seen += request
+            // Virtual time: a probe that is still running when the address is edited.
+            if (waitMs > 0) kotlinx.coroutines.delay(waitMs)
             respond(
                 """{"version":"0.42.0","auth_required":true,"auth_providers":["basic"]}""",
                 HttpStatusCode.OK,
@@ -96,6 +99,19 @@ class ConnectViewModelTest {
         vm.testConnection()
         awaitResult(vm)
         vm.onUrlEdited()
+        assertNull(vm.state.value.result)
+    }
+
+    /** A probe still running belongs to the old text: its late answer must not land under the new one. */
+    @Test
+    fun editingCancelsAProbeStillRunning() = runTest(dispatcher) {
+        val vm = viewModel(waitMs = 5_000)
+        vm.url.setTextAndPlaceCursorAtEnd("100.64.0.1:9119")
+        vm.testConnection()
+        assertTrue(vm.state.value.testing)
+        vm.onUrlEdited()
+        assertFalse(vm.state.value.testing)
+        testScheduler.advanceTimeBy(10_000)
         assertNull(vm.state.value.result)
     }
 

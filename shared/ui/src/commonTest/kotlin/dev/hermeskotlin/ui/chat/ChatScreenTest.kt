@@ -45,6 +45,8 @@ class ChatScreenTest {
     fun theLinkLineSaysWhyTheChatIsOffline() {
         assertEquals("Waiting for network…", linkStatus(ConnectionState.Reconnecting(3, 0, "Can't reach gateway: Unable to resolve host")))
         assertEquals("Reconnecting…", linkStatus(ConnectionState.Reconnecting(1, 0, "Connection lost")))
+        // A proxy's 5xx is a dead gateway behind it, not a dead radio: don't blame the phone's network.
+        assertEquals("Gateway down · retrying…", linkStatus(ConnectionState.Reconnecting(2, 0, "Gateway unreachable: HTTP 502")))
         // A retry under way still says reconnecting.
         assertEquals("Reconnecting…", linkStatus(ConnectionState.Connecting(2)))
     }

@@ -154,6 +154,11 @@ fun ProbeResult.toStageResult(): StageResult = when (this) {
         "Can't reach $url: the server asked for a client certificate ($reason).",
         clientCertFix,
     )
+    is ProbeResult.ProxyFailed -> StageResult.Failed(
+        "The proxy at $url answered HTTP $httpStatus: it is up, but nothing answered behind it.",
+        "The reverse proxy is fine, so the gateway itself is not there: check the SSH tunnel from this PC to the proxy and that " +
+            "`hermes dashboard` is running on the PC, then check again.",
+    )
     is ProbeResult.NotHermes -> StageResult.Failed(
         "Something answered at $url" + (httpStatus?.let { " (HTTP $it)" } ?: "") + ", but not a Hermes dashboard.",
         "Use the dashboard's own port, 9119 by default. Behind a proxy, check that it forwards to the dashboard.",

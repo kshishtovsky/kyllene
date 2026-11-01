@@ -27,6 +27,12 @@ sealed interface ProbeResult {
     data class NotHermes(val url: GatewayUrl, val httpStatus: Int?) : ProbeResult
 
     /**
+     * A proxy in front of the dashboard answered, but the dashboard did not: nginx/Caddy report 502,
+     * 503 or 504 when its upstream is missing. That is a tunnel or a stopped dashboard, not a wrong port.
+     */
+    data class ProxyFailed(val url: GatewayUrl, val httpStatus: Int) : ProbeResult
+
+    /**
      * Cloudflare Access stopped the request before it reached Hermes: a redirect to its login page, or a
      * Cloudflare 403. [tokenSent] says whether a service token went with it, so whether it was turned down.
      */
@@ -59,6 +65,8 @@ class GatewayProbe(private val client: HttpClient) {
             ProbeResult.AccessBlocked(url, code, tokenSent)
         } else if (!isJson && code in CERT_REPLY_CODES && isClientCertReply(code, response.bodyAsText().take(CERT_REPLY_SCAN))) {
             ProbeResult.ClientCertRequired(url, "HTTP $code")
+        } else if (!isJson && code in PROXY_UPSTREAM_CODES) {
+            ProbeResult.ProxyFailed(url, code)
         } else if (!response.status.isSuccess() || !isJson) {
             ProbeResult.NotHermes(url, response.status.value)
         } else {
@@ -98,6 +106,9 @@ internal fun isClientCertReply(code: Int, body: String): Boolean {
 
 /** The codes [isClientCertReply] can match, checked first so no other reply's body is read. */
 private val CERT_REPLY_CODES = setOf(400, 495, 496)
+
+/** A reverse proxy's own "upstream is gone" answers: the tunnel or the dashboard behind it is down. */
+private val PROXY_UPSTREAM_CODES = setOf(502, 503, 504)
 
 /** How much of a reply [isClientCertReply] reads: nginx's error page names the certificate near its top. */
 private const val CERT_REPLY_SCAN = 2_048

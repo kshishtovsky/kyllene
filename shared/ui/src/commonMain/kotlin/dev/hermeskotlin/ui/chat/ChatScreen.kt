@@ -2142,13 +2142,21 @@ internal fun connectionLabel(state: ConnectionState): String = when (state) {
  * at all, else reconnecting. Null when it's up, or down for good (the title says so then).
  */
 internal fun linkStatus(state: ConnectionState): String? = when (state) {
-    is ConnectionState.Reconnecting -> if (state.reason.startsWith(UNREACHABLE)) "Waiting for network…" else "Reconnecting…"
+    is ConnectionState.Reconnecting -> when {
+        // Only a reason that names the network means the radio: a proxy's 5xx reads as reconnecting.
+        state.reason.startsWith(UNREACHABLE) -> "Waiting for network…"
+        state.reason.startsWith(PROXY_DOWN) -> "Gateway down · retrying…"
+        else -> "Reconnecting…"
+    }
     is ConnectionState.Connecting -> if (state.attempt > 1) "Reconnecting…" else null
     is ConnectionState.Connected, ConnectionState.Idle, ConnectionState.SessionExpired, is ConnectionState.Failed -> null
 }
 
 /** GatewayConnection's reason when the ticket request never reached the gateway (no network, or it's down). */
 private const val UNREACHABLE = "Can't reach gateway"
+
+/** GatewayConnection's reason when the proxy answered but the gateway behind it did not (the tunnel is down). */
+private const val PROXY_DOWN = "Gateway unreachable"
 
 /** The banner over the chat while the gateway can't be reached: where, what's being done about it, and Retry now. */
 @Composable

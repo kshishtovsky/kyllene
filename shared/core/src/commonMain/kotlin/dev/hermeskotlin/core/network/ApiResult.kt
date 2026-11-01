@@ -25,8 +25,8 @@ sealed interface ApiResult<out T> {
     /** 429: login rate limit. */
     data object RateLimited : ApiResult<Nothing>
 
-    /** Network failure or 5xx: worth retrying. */
-    data class Unavailable(val message: String) : ApiResult<Nothing>
+    /** Network failure or 5xx: worth retrying. [fromServer] tells a proxy in the way from a dead radio. */
+    data class Unavailable(val message: String, val fromServer: Boolean = false) : ApiResult<Nothing>
 
     /** Anything else (4xx with a message). */
     data class Failed(val status: Int, val message: String) : ApiResult<Nothing>
@@ -48,7 +48,7 @@ internal suspend fun apiCall(isLogin: Boolean = false, block: suspend () -> Http
             isAccessLoginRedirect(status.value, response.headers[HttpHeaders.Location]) ||
                 isCloudflareRefusal(status.value, response.headers[HttpHeaders.Server], response.isJson) ->
                 ApiResult.Failed(status.value, ACCESS_BLOCKED)
-            status.value >= 500 -> ApiResult.Unavailable(response.errorMessage())
+            status.value >= 500 -> ApiResult.Unavailable(response.errorMessage(), fromServer = true)
             else -> ApiResult.Failed(status.value, response.errorMessage())
         }
     } catch (e: CancellationException) {
