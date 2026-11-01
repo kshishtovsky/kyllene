@@ -86,6 +86,46 @@ class GatewayProbeTest {
     }
 
     @Test
+    fun plainHttpRedirectNamesTheHttpsAddress() = runTest {
+        val plain = GatewayUrl.parse("http://hermes.example.com/hermes")
+        val engine = MockEngine {
+            respond(
+                "<html><body>308 Permanent Redirect</body></html>",
+                HttpStatusCode.PermanentRedirect,
+                headersOf(HttpHeaders.Location, "https://hermes.example.com/hermes/api/status"),
+            )
+        }
+        val result = assertIs<ProbeResult.PlainHttpRedirect>(probeWith(engine).probe(plain))
+        assertEquals("https://hermes.example.com/hermes", result.secureUrl)
+        val stage = assertIs<StageResult.Failed>(result.toStageResult())
+        assertTrue(stage.fix.contains("https://hermes.example.com/hermes"))
+        assertFalse(stage.fix.contains("api/status"), "the address to type is the base, not the probe path")
+        assertFalse(stage.fix.contains("9119"), "a proxy redirect is not a wrong port")
+    }
+
+    @Test
+    fun aRedirectPathIsTrimmedBackToTheAddress() {
+        assertEquals("https://h.example/hermes", secureBaseFromRedirect("https://h.example/hermes/api/status"))
+        assertEquals("https://h.example", secureBaseFromRedirect("https://h.example/api/status"))
+        assertEquals("https://h.example/hermes", secureBaseFromRedirect("https://h.example/hermes/"))
+        assertEquals("https://h.example", secureBaseFromRedirect("https://h.example/"))
+    }
+
+    @Test
+    fun aRedirectToHttpsIsIgnoredWhenAlreadyOnHttps() = runTest {
+        val secure = GatewayUrl.parse("https://hermes.example.com")
+        val engine = MockEngine {
+            respond(
+                "<html><body>308</body></html>",
+                HttpStatusCode.PermanentRedirect,
+                headersOf(HttpHeaders.Location, "https://elsewhere.example/hermes/"),
+            )
+        }
+        val result = probeWith(engine).probe(secure)
+        assertIs<ProbeResult.NotHermes>(result)
+    }
+
+    @Test
     fun connectionFailureIsUnreachable() = runTest {
         val engine = MockEngine { throw IllegalStateException("Connection refused") }
         val result = assertIs<ProbeResult.Unreachable>(probeWith(engine).probe(url))

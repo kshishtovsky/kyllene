@@ -42,16 +42,13 @@ fun createHttpClient(
             connectTimeoutMillis = 15_000
             requestTimeoutMillis = 30_000
         }
-        install(WebSockets) { maxFrameSize = MAX_FRAME_BYTES }
+        // No maxFrameSize here: the OkHttp engine throws "Max frame size switch is not supported in
+        // OkHttp engine" on every upgrade, which kills the socket before the first frame. The frame
+        // bound lives in KtorWebSocketTransport instead, where it can also close the socket cleanly.
+        install(WebSockets)
         if (cookies != null) install(HttpCookies) { storage = cookies }
         if (access != null) install(cloudflareAccess(access))
         if (bearer != null) install(nativeBearer(bearer))
     }
     return if (engine != null) HttpClient(engine, config) else HttpClient(config)
 }
-
-/**
- * The most one socket frame may be. A gateway — or anything answering in its place — otherwise decides how much
- * memory a frame takes, and one huge frame kills the app. A whole transcript page fits well under this.
- */
-private const val MAX_FRAME_BYTES = 8L * 1024 * 1024

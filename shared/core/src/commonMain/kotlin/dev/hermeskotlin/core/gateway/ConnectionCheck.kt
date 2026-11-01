@@ -159,6 +159,11 @@ fun ProbeResult.toStageResult(): StageResult = when (this) {
         "The reverse proxy is fine, so the gateway itself is not there: check the SSH tunnel from this PC to the proxy and that " +
             "`hermes dashboard` is running on the PC, then check again.",
     )
+    is ProbeResult.PlainHttpRedirect -> StageResult.Failed(
+        "The address speaks plain http and the proxy turns it away, sending you to $secureUrl instead.",
+        "Use $secureUrl — that is the same gateway over TLS. Plain http is refused on purpose: over a tunnel " +
+            "or LTE it would carry your password and every message in the clear.",
+    )
     is ProbeResult.NotHermes -> StageResult.Failed(
         "Something answered at $url" + (httpStatus?.let { " (HTTP $it)" } ?: "") + ", but not a Hermes dashboard.",
         "Use the dashboard's own port, 9119 by default. Behind a proxy, check that it forwards to the dashboard.",

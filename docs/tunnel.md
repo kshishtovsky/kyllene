@@ -103,3 +103,27 @@ Enter `https://<domain>/hermes` on the connect screen. The fork adds three rules
 
 A turn that was streaming when the link died is not lost: the app resumes the session and replays from the last event
 it saw, and an undelivered prompt is kept, not silently resent.
+
+## 6. What was actually verified on this setup
+
+Measured end-to-end against `https://mylifemyrulesonline.ru/hermes`, not assumed from Caddy validating:
+
+| Step | Result |
+| --- | --- |
+| `GET /hermes/api/status` from outside | `200`, `{"name":…,"version":"0.22.5"}` |
+| `GET /hermes/api/sessions` with no cookie | `401 no_cookie` |
+| `POST /hermes/auth/password-login` | `200`; cookie comes back `__Secure-hermes_session_*` with `Path=/hermes; Secure; HttpOnly` |
+| `POST /hermes/api/auth/ws-ticket` | `200 {"ticket":"…","ttl_seconds":30}` |
+| `wss://…/hermes/api/ws` (subprotocol `hermes-gateway-v1`, `hermes-gateway-ticket.<ticket>`) | opens; `session.list` 3, `session.resume` → live id, `approval.pending` ok, `session.history` 251 rows / 161 tool rows |
+| The app itself | `Hermes 0.22.5 is reachable`, sign-in succeeds, chat opens over LTE/HTTPS |
+
+Two things this pass found that a config-only check would have missed:
+
+1. **The dashboard mints WS tickets on `POST /api/auth/ws-ticket`, not `GET /api/ws-ticket`.** A GET returns
+   the headless-backend notice, which reads like "web UI is disabled" and sends you hunting a server flag.
+2. **`install(WebSockets) { maxFrameSize = … }` silently kills every socket on the OkHttp engine** — it throws
+   `Max frame size switch is not supported in OkHttp engine` after the upgrade, so the server logs
+   `ws accepted` followed by `closed code=1011 messages=0` and the app says `Can't reach <host>`. The frame bound
+   lives in `KtorWebSocketTransport` now. If the same symptom ever comes back, that close-code pattern in the
+   server log is the tell.
+

@@ -33,6 +33,13 @@ sealed interface ProbeResult {
     data class ProxyFailed(val url: GatewayUrl, val httpStatus: Int) : ProbeResult
 
     /**
+     * The address speaks plain `http` and the proxy refuses it with a redirect to `https`: the proxy is
+     * fine, the address is wrong. Without this the redirect reads as "not a Hermes dashboard, check port
+     * 9119", which sends the user to the wrong thing entirely.
+     */
+    data class PlainHttpRedirect(val url: GatewayUrl, val secureUrl: String) : ProbeResult
+
+    /**
      * Cloudflare Access stopped the request before it reached Hermes: a redirect to its login page, or a
      * Cloudflare 403. [tokenSent] says whether a service token went with it, so whether it was turned down.
      */
@@ -63,6 +70,11 @@ class GatewayProbe(private val client: HttpClient) {
         val cloudflareRefused = isCloudflareRefusal(code, response.headers[HttpHeaders.Server], isJson)
         if (isAccessLoginRedirect(code, response.headers[HttpHeaders.Location]) || cloudflareRefused && tokenSent) {
             ProbeResult.AccessBlocked(url, code, tokenSent)
+        } else if (
+            !url.isSecure && code in REDIRECT_CODES &&
+            response.headers[HttpHeaders.Location]?.startsWith("https://", ignoreCase = true) == true
+        ) {
+            ProbeResult.PlainHttpRedirect(url, secureBaseFromRedirect(response.headers[HttpHeaders.Location]!!))
         } else if (!isJson && code in CERT_REPLY_CODES && isClientCertReply(code, response.bodyAsText().take(CERT_REPLY_SCAN))) {
             ProbeResult.ClientCertRequired(url, "HTTP $code")
         } else if (!isJson && code in PROXY_UPSTREAM_CODES) {
@@ -107,8 +119,21 @@ internal fun isClientCertReply(code: Int, body: String): Boolean {
 /** The codes [isClientCertReply] can match, checked first so no other reply's body is read. */
 private val CERT_REPLY_CODES = setOf(400, 495, 496)
 
+/**
+ * Turns a proxy's `Location` for a refused plain-http probe back into the address to type. The probe asked
+ * for `<base>/api/status`, so the redirect carries that whole path; handing it back as the address would
+ * have the user paste `…/hermes/api/status` into the connect field and fail on the next step.
+ */
+internal fun secureBaseFromRedirect(location: String): String {
+    val trimmed = location.trim().trimEnd('/')
+    return trimmed.removeSuffix("/api/status").removeSuffix("api/status").trimEnd('/').ifEmpty { trimmed }
+}
+
 /** A reverse proxy's own "upstream is gone" answers: the tunnel or the dashboard behind it is down. */
 private val PROXY_UPSTREAM_CODES = setOf(502, 503, 504)
+
+/** Redirects a proxy sends when it refuses to serve plain http, whatever it named in `Location`. */
+private val REDIRECT_CODES = setOf(301, 302, 307, 308)
 
 /** How much of a reply [isClientCertReply] reads: nginx's error page names the certificate near its top. */
 private const val CERT_REPLY_SCAN = 2_048

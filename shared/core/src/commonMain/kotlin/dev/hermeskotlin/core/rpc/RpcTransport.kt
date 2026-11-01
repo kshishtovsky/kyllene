@@ -45,11 +45,30 @@ interface RpcTransport {
     suspend fun close(code: Short = CloseReason.Codes.NORMAL.code, reason: String = "")
 }
 
+/**
+ * The most one inbound frame may be. The OkHttp engine cannot cap a frame while it assembles it
+ * (`setMaxFrameSize` throws), so the bound is enforced here: a peer — or anything answering in its
+ * place — otherwise decides how much memory one frame takes, and a single huge frame kills the app.
+ * The gateway's own transcript pages sit far below this.
+ */
+internal const val MAX_FRAME_BYTES = 8 * 1024 * 1024
+
+/** 1009 "message too big": the peer sent a frame past [MAX_FRAME_BYTES]. */
+internal const val CLOSE_TOO_BIG: Short = 1009
+
+internal fun exceedsFrameBound(bytes: Int, limit: Int = MAX_FRAME_BYTES): Boolean = bytes > limit
+
 private class KtorWebSocketTransport(private val session: DefaultClientWebSocketSession) : RpcTransport {
 
     override val incoming: Flow<String> = flow {
         for (frame in session.incoming) {
-            if (frame is Frame.Text) emit(frame.readText())
+            if (frame !is Frame.Text) continue
+            val size = frame.data.size
+            if (exceedsFrameBound(size)) {
+                runCatching { session.close(CloseReason(CLOSE_TOO_BIG, "frame over ${MAX_FRAME_BYTES}B")) }
+                throw TransportClosedException(CLOSE_TOO_BIG, "Inbound frame of $size bytes is over the ${MAX_FRAME_BYTES}-byte limit")
+            }
+            emit(frame.readText())
         }
         val reason = runCatching { session.closeReason.await() }.getOrNull()
         throw TransportClosedException(reason?.code, reason?.message?.ifBlank { null })

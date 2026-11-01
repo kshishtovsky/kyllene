@@ -31,6 +31,9 @@ value class GatewayUrl private constructor(val value: String) {
     /** Host name only, e.g. `hermes.example.ts.net`. */
     val host: String get() = Url(value).host
 
+    /** Whether the address is `https://` — a private host over plain `http` is still unencrypted, only local. */
+    val isSecure: Boolean get() = Url(value).protocol == URLProtocol.HTTPS
+
     /** The port to reach, explicit or the scheme's own; only a hint for pickers, never a connection. */
     val port: Int get() = Url(value).port
 
