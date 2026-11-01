@@ -2286,11 +2286,21 @@ private fun List<InputRequest>.plusNew(more: List<InputRequest>): List<InputRequ
 internal fun ChatState.withInflight(streamed: String): ChatState {
     val open = messages.indexOfLast { it is ChatMessage.Assistant && it.streaming }
     if (open < 0) {
-        return copy(messages = messages + ChatMessage.Assistant(key = "live-$keySeq", text = streamed, streaming = true), keySeq = keySeq + 1)
+        return copy(
+            messages = messages + ChatMessage.Assistant(
+                key = "live-$keySeq",
+                text = streamed,
+                streaming = true,
+                parts = listOf(ReplyPart.Text(streamed)).filter { streamed.isNotEmpty() },
+            ),
+            keySeq = keySeq + 1,
+        )
     }
     val reply = messages[open] as ChatMessage.Assistant
     if (streamed.length <= reply.text.length || !streamed.startsWith(reply.text)) return this
-    return copy(messages = messages.toMutableList().apply { set(open, reply.copy(text = streamed)) })
+    // The text came whole, so where it split around the calls is unknown: it becomes one block at the end.
+    val grown = reply.copy(text = streamed, parts = reply.parts.filterNot { it is ReplyPart.Text } + ReplyPart.Text(streamed))
+    return copy(messages = messages.toMutableList().apply { set(open, grown) })
 }
 
 /**
@@ -2341,6 +2351,14 @@ internal fun List<ChatMessage>.withSavedStepsInLiveReply(
         } +
             live.tools.filter { tool -> saved.tools.none { it.id == tool.id } },
         repliedTo = live.repliedTo ?: saved.repliedTo,
+        // The saved steps came from stored rows, so they still know which call came after which words: keep that
+        // order and hang the rest of the stream off the end. (If they don't line up, the reply shows as three
+        // piles rather than risk cutting the text.)
+        parts = if (saved.parts.isNotEmpty() && live.text.startsWith(saved.text)) {
+            saved.parts + live.text.removePrefix(saved.text).takeIf { it.isNotBlank() }?.let { listOf(ReplyPart.Text(it)) }.orEmpty()
+        } else {
+            live.parts
+        },
     )
     return toMutableList().apply {
         set(liveAt, folded)

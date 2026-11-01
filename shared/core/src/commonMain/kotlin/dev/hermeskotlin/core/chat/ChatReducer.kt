@@ -29,7 +29,7 @@ fun ChatState.reduce(event: GatewayEvent, now: Double? = null): ChatState {
             // Commentary next to tool calls; when already streamed it is in the text already.
             if (payload.boolean("already_streamed") == true) this else appendText(payload.string("text")?.let { "$it\n\n" })
         "reasoning.delta", "reasoning.available" -> payload.string("text")?.let { chunk ->
-            withOpenReply { it.copy(reasoning = it.reasoning + chunk) }
+            withOpenReply { it.copy(reasoning = it.reasoning + chunk).plusPart(ReplyPart.Reasoning(chunk)) }
         } ?: this
         // Not reasoning: each frame is the TUI's spinner rewritten ("(>∀<☆)☆ musing..."), so the latest one
         // labels the live activity. An explained provider wait goes to the status line, like Desktop.
@@ -46,7 +46,7 @@ fun ChatState.reduce(event: GatewayEvent, now: Double? = null): ChatState {
                 input = ToolDetails.input(payload?.get("args"), payload.string("args_text")),
                 agentScreen = AgentScreen.from(payload.string("name") ?: "", payload?.get("args")),
             ).let { if (it.name == DELEGATE_TOOL) it.copy(tasks = delegatedTasks(payload?.get("args"), null)) else it }
-            withOpenReply { reply -> reply.copy(tools = reply.tools.filterNot { it.id == id } + tool) }
+            withOpenReply { reply -> reply.copy(tools = reply.tools.filterNot { it.id == id } + tool).plusPart(ReplyPart.Tool(id)) }
                 .copy(running = true, thinkingFrame = null)
         }
         // The model is still writing the call's arguments; say what's coming.
@@ -194,7 +194,7 @@ internal fun ChatState.withInfo(info: JsonObject?): ChatState {
 
 private fun ChatState.appendText(chunk: String?): ChatState {
     if (chunk.isNullOrEmpty()) return this
-    return withOpenReply { it.copy(text = it.text + chunk) }.copy(running = true)
+    return withOpenReply { it.copy(text = it.text + chunk).plusPart(ReplyPart.Text(chunk)) }.copy(running = true)
 }
 
 private fun ChatState.complete(payload: JsonObject?, now: Double?): ChatState {
@@ -235,6 +235,11 @@ private fun ChatState.complete(payload: JsonObject?, now: Double?): ChatState {
         usage = finalUsage?.let { end -> turnStartUsage?.let { end - it } }?.takeIf { it.any },
         warning = warning,
         timestamp = now ?: base.timestamp,
+        // Nothing streamed (a provider that doesn't stream, or this device joined late): the blocks are only
+        // known now, so the final words are theirs, in the order a whole reply reads: thought, then said.
+        parts = base.parts
+            .let { parts -> if (base.reasoning.isBlank() && finalReasoning.isNotBlank() && parts.none { it is ReplyPart.Reasoning }) parts + ReplyPart.Reasoning(finalReasoning) else parts }
+            .let { parts -> if (base.text.isBlank() && finalText.isNotBlank() && parts.none { it is ReplyPart.Text }) parts + ReplyPart.Text(finalText) else parts },
     )
     // A turn that ended with nothing to show (e.g. interrupted at once) leaves no bubble, unless it failed or warns.
     val empty = reply.text.isBlank() && reply.reasoning.isBlank() && reply.tools.isEmpty() && reply.error == null && warning == null
@@ -380,6 +385,12 @@ fun historyToMessages(rows: List<SessionMessage>, liveSessionId: String? = null,
                     )
                 }
                 val reasoning = row.reasoning.orEmpty()
+                // One stored step is one round of the loop: what it thought, what it said, the calls it then ran.
+                val step = buildList {
+                    reasoning.takeIf { it.isNotBlank() }?.let { add(ReplyPart.Reasoning(it)) }
+                    text.takeIf { it.isNotBlank() }?.let { add(ReplyPart.Text(it)) }
+                    tools.forEach { add(ReplyPart.Tool(it.id)) }
+                }
                 val previous = (messages.lastOrNull() as? ChatMessage.Assistant)?.takeUnless { before ->
                     val at = row.timestamp
                     val ended = before.timestamp
@@ -390,6 +401,8 @@ fun historyToMessages(rows: List<SessionMessage>, liveSessionId: String? = null,
                         text = listOf(previous.text, text).filter { it.isNotEmpty() }.joinToString("\n\n"),
                         reasoning = listOf(previous.reasoning, reasoning).filter { it.isNotEmpty() }.joinToString("\n\n"),
                         tools = previous.tools + tools,
+                        // Steps in the order they were written: the loop's rounds, not one pile of calls.
+                        parts = step.fold(previous.parts) { parts, part -> parts.plusPart(part) },
                         // The reply is dated by its last step, when it finished.
                         timestamp = row.timestamp ?: previous.timestamp,
                     )
@@ -401,6 +414,7 @@ fun historyToMessages(rows: List<SessionMessage>, liveSessionId: String? = null,
                         tools = tools,
                         repliedTo = replyingTo,
                         timestamp = row.timestamp,
+                        parts = step,
                     )
                 }
             }

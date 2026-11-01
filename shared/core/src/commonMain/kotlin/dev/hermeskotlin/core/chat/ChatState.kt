@@ -109,6 +109,12 @@ sealed interface ChatMessage {
          * (live events carry no time). Null while it streams.
          */
         val timestamp: Double? = null,
+        /**
+         * The blocks of the reply in the order the model made them: what it thought, the calls it ran, what it
+         * said, then round again. [text], [reasoning] and [tools] hold the same content; this is how they line up.
+         * Empty for a reply that only has the three piles (one built before this existed, or by a preview).
+         */
+        val parts: List<ReplyPart> = emptyList(),
     ) : ChatMessage
 
     /**

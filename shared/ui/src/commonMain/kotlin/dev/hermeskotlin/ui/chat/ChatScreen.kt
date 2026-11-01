@@ -269,6 +269,8 @@ import com.composeunstyled.theme.Theme
 import dev.hermeskotlin.designsystem.rememberHoverIndication
 import dev.hermeskotlin.core.chat.Attachment
 import dev.hermeskotlin.core.chat.ChatMessage
+import dev.hermeskotlin.core.chat.ReplyPart
+import dev.hermeskotlin.core.chat.blocks
 import dev.hermeskotlin.core.chat.TranscriptEvent
 import dev.hermeskotlin.core.chat.GatewayNotice
 import dev.hermeskotlin.core.chat.ChatState
@@ -2621,10 +2623,6 @@ private fun AssistantReply(
     onStopReading: () -> Unit = {},
 ) {
     val settings = LocalAppSettings.current
-    val showReasoning = settings.showReasoning && message.reasoning.isNotBlank()
-    // Messages to other bots get their own line below, so they aren't listed again among the tools.
-    val listedTools = message.tools.filter { it.name != MESSAGE_AGENT_TOOL }
-    val showTools = settings.showToolActivity && listedTools.isNotEmpty()
     // Pictures and files the reply delivered show as themselves, not as Markdown a renderer can't load.
     // Pictures image_generate made show where it ran, as on Desktop: the model may never name them.
     val generated = remember(message.tools) { message.tools.mapNotNull { it.generatedImage }.distinctBy { it.source } }
@@ -2656,29 +2654,52 @@ private fun AssistantReply(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         ReplyHeader(message.timestamp.takeUnless { message.streaming })
-        // What's happening now is said once, above the composer; the reply keeps only what it's made of.
-        if (showReasoning) Reasoning(message.reasoning, message.streaming)
-        // While the turn runs its finished steps are listed as they land; once it ends they fold into the pill.
-        if (showTools) if (message.streaming) LiveSteps(listedTools, message.key) else Tools(listedTools, message.key)
+        // The reply in the order the model made it: what it thought, what it ran, what it said, then round again.
+        // Calls with nothing said between them stay one pill, so only the loop's real breaks part it.
+        val blocks = remember(message.parts, message.text, message.reasoning, message.tools) { message.blocks() }
+        // Named the way the agent will know it: the newest reply, or an older one by its first words.
+        val source = remember(message.key, text, last) {
+            CommentSource(
+                messageKey = message.key,
+                label = if (last) LAST_REPLY else "your earlier reply that starts “${openingWords(text)}”",
+                markdown = text,
+            )
+        }
+        var at = 0
+        while (at < blocks.size) {
+            val part = blocks[at]
+            if (part is ReplyPart.Tool) {
+                // A run of calls, up to the next thought or word.
+                val group = mutableListOf<ToolActivity>()
+                while (at < blocks.size && blocks[at] is ReplyPart.Tool) {
+                    val id = (blocks[at] as ReplyPart.Tool).id
+                    message.tools.firstOrNull { it.id == id && it.name != MESSAGE_AGENT_TOOL }?.let { group += it }
+                    at++
+                }
+                // While the turn runs its finished steps are listed as they land; once it ends they fold into the pill.
+                if (settings.showToolActivity && group.isNotEmpty()) {
+                    if (message.streaming) LiveSteps(group, message.key) else Tools(group, message.key)
+                }
+                continue
+            }
+            // What's happening now is said once, above the composer; the reply keeps only what it's made of.
+            if (part is ReplyPart.Reasoning && settings.showReasoning) Reasoning(part.text, message.streaming)
+            if (part is ReplyPart.Text) {
+                val said = remember(part.text, generated, unservable) { extractReplyMedia(part.text, generated + unservable).first }
+                if (said.isNotBlank()) {
+                    // Not while it streams: the text and its blocks are still changing under the selection.
+                    CommentableSelection(source.takeUnless { message.streaming }, selection) {
+                        MarkdownText(remember(said) { linkFileUris(said) }, streaming = message.streaming)
+                    }
+                }
+            }
+            at++
+        }
         if (generated.isNotEmpty()) ReplyMediaList(remember(generated) { generated.map { it.asMedia() } })
         // Shown whatever the tool-activity setting: the work happens out of sight, in other agents.
         message.tools.filter { it.name == "delegate_task" }.forEach { DelegationCard(it) }
         // Messages to other bots, said whatever the tool-activity setting: they're part of the conversation.
         message.tools.filter { it.name == MESSAGE_AGENT_TOOL }.forEach { MessagedLine(it) }
-        if (text.isNotBlank()) {
-            // Named the way the agent will know it: the newest reply, or an older one by its first words.
-            val source = remember(message.key, text, last) {
-                CommentSource(
-                    messageKey = message.key,
-                    label = if (last) LAST_REPLY else "your earlier reply that starts “${openingWords(text)}”",
-                    markdown = text,
-                )
-            }
-            // Not while it streams: the text and its blocks are still changing under the selection.
-            CommentableSelection(source.takeUnless { message.streaming }, selection) {
-                MarkdownText(remember(text) { linkFileUris(text) }, streaming = message.streaming)
-            }
-        }
         // Screens the agent drew, under what it said and whatever the tool-activity setting: they're for the user to answer.
         val screens = LocalScreenViews.current
         message.tools.forEach { call ->
