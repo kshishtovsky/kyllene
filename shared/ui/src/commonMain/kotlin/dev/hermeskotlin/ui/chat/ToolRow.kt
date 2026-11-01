@@ -139,7 +139,7 @@ internal fun ToolRow(tool: ToolActivity, messageKey: String? = null) {
             Column(Modifier.padding(start = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 tool.risk?.let { RiskNote(it) }
                 tool.input?.let { Block("Input", it, source = source("input")) }
-                tool.diff?.let { Block("Changes", it, diff = true, source = source("changes")) }
+                tool.diff?.let { DiffView(it, source = source("changes")) }
                 tool.output?.let { Block(if (tool.failed) "Error" else "Output", it, source = source(if (tool.failed) "error" else "output")) }
                 if (tool.running && tool.output == null) {
                     Text("Still running…", style = Theme[typography][caption], color = Theme[colors][textTertiary])

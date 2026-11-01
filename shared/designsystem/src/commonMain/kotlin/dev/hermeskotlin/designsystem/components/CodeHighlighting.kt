@@ -3,6 +3,8 @@ package dev.hermeskotlin.designsystem.components
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import dev.snipme.highlights.Highlights
 import dev.snipme.highlights.model.ColorHighlight
 import dev.snipme.highlights.model.SyntaxLanguage
@@ -125,8 +127,32 @@ object CodeHighlighter {
 }
 
 /**
- * Highlighted code by content, so a finished block isn't worked out again each time the reply around it
- * changes (a streaming reply re-renders on every delta). Least recently used entries go first.
+ * One line of code as colored text: each stretch in its token's colour. For callers outside this module, which
+ * can't name the highlighter's own language type.
+ */
+fun highlightedLine(text: String, language: String?, palette: SyntaxColors, base: Color): AnnotatedString {
+    val syntax = CodeHighlighter.language(language) ?: return AnnotatedString(text)
+    if (text.isEmpty()) return AnnotatedString(text)
+    val spans = CodeHighlighter.spans(text, syntax)
+    if (spans.isEmpty()) return AnnotatedString(text)
+    // A colour per character, so overlapping spans (a keyword inside a string) can't garble the line.
+    val colors = arrayOfNulls<Color>(text.length)
+    spans.forEach { span -> for (i in span.start.coerceAtLeast(0) until span.end.coerceAtMost(text.length)) colors[i] = palette.of(span.token) }
+    return buildAnnotatedString {
+        var runStart = 0
+        while (runStart < text.length) {
+            val color = colors[runStart]
+            var end = runStart
+            while (end < text.length && colors[end] == color) end++
+            if (color == null) append(text.substring(runStart, end)) else withStyle(SpanStyle(color = color)) { append(text.substring(runStart, end)) }
+            runStart = end
+        }
+    }
+}
+
+/**
+ * Highlighted code by content, so a finished block isn't worked out again each time the reply around
+ * it changes (a streaming reply re-renders on every delta). Least recently used entries go first.
  */
 class HighlightCache(
     private val maxEntries: Int = 64,
