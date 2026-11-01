@@ -370,7 +370,8 @@ fun historyToMessages(rows: List<SessionMessage>, liveSessionId: String? = null,
                 // A step of the running turn is saved before its calls end: one with no result row yet still runs.
                 val runningTurn = turnStartedAt != null && row.timestamp != null && row.timestamp >= turnStartedAt
                 val tools = row.storedToolCalls.mapIndexed { i, call ->
-                    val result = call.id?.let(results::get)?.content
+                    val resultRow = call.id?.let(results::get)
+                    val result = resultRow?.content
                     ToolActivity(
                         id = call.id ?: "$key-$i",
                         name = call.name,
@@ -378,6 +379,8 @@ fun historyToMessages(rows: List<SessionMessage>, liveSessionId: String? = null,
                         input = ToolDetails.input(call.arguments),
                         output = ToolDetails.output(result),
                         failed = ToolDetails.failed(result),
+                        // A stored edit keeps its diff beside the row, not in the result text.
+                        diff = resultRow?.inlineDiff ?: ToolDetails.diff(result),
                         tasks = if (call.name == DELEGATE_TOOL) delegatedTasks(call.arguments, result) else emptyList(),
                         delegationIds = if (call.name == DELEGATE_TOOL) delegationIds(result) else emptyList(),
                         generatedImage = if (storedToolName(call.name, call.arguments) == IMAGE_GENERATE_TOOL) GeneratedImage.from(result) else null,

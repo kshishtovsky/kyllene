@@ -127,4 +127,39 @@ class UnifiedDiffTest {
         assertEquals("dockerfile", languageOfPath("docker/Dockerfile"))
         assertEquals(null, languageOfPath(""))
     }
+
+    /**
+     * The gateway's own inline diff, byte for byte as it stores it: a caption, colour codes, a header naming both
+     * sides with an arrow, and a CRLF at the end. This is what a `write_file` call actually leaves behind.
+     */
+    @Test
+    fun theGatewaysColouredDiffReadsAsOneFile() {
+        val stored = "  \u250A review diff\n" +
+            "a/C:\\Users\\x\\hello.py \u2192 b/C:\\Users\\x\\hello.py\n" +
+            "@@ -0,0 +1,3 @@\n" +
+            "\u001B[38;2;255;221;228m+\"\"\"hi.\"\"\"\u001B[0m\n" +
+            "+\n" +
+            "+print(1)\n"
+        val file = parseUnifiedDiff(stored).single()
+        assertEquals("C:\\Users\\x\\hello.py", file.path)
+        assertEquals(3, file.added)
+        assertEquals(0, file.removed)
+        // No line still carries a colour code, and the caption is gone.
+        assertEquals(listOf("\"\"\"hi.\"\"\"", "", "print(1)"), file.lines.filter { it.kind == DiffLineKind.Added }.map { it.text })
+        assertEquals(listOf(1, 2, 3), file.lines.filter { it.kind == DiffLineKind.Added }.map { it.newNumber })
+        assertEquals(null, file.lines.map { it.text }.firstOrNull { it.contains('\u001B') })
+        assertEquals(null, file.lines.map { it.text }.firstOrNull { it.contains('\u250A') })
+    }
+
+    @Test
+    fun anEditThatChangesALineKeepsBothSides() {
+        val file = parseUnifiedDiff(
+            "a/src/x.ts \u2192 b/src/x.ts\n@@ -4,2 +4,2 @@\n-const a = 1\n+const a = 2\n const b = 3",
+        ).single()
+        assertEquals("src/x.ts", file.path)
+        assertEquals(listOf(1, 1, 1), listOf(file.added, file.removed, file.lines.count { it.kind == DiffLineKind.Context }))
+        assertEquals(listOf(4), file.lines.filter { it.kind == DiffLineKind.Removed }.map { it.oldNumber })
+        assertEquals(listOf(4), file.lines.filter { it.kind == DiffLineKind.Added }.map { it.newNumber })
+        assertEquals(listOf(5), file.lines.filter { it.kind == DiffLineKind.Context }.map { it.newNumber })
+    }
 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composeunstyled.Text
@@ -111,9 +112,12 @@ private fun DiffFileBlock(file: DiffFile, sideways: androidx.compose.foundation.
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
+            // The path on one line: a long one is cut at the front, where it says the least (the file name stays).
+            BasicText(
                 file.path.ifEmpty { "changes" },
-                style = Theme[typography][code].copy(fontSize = 11.5.sp, color = Theme[colors][textSecondary]),
+                style = Theme[typography][code].copy(fontSize = 11.5.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
             if (file.added > 0) Text("+${file.added}", style = Theme[typography][caption], color = Theme[colors][success])

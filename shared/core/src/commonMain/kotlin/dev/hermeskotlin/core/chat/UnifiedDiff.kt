@@ -47,13 +47,24 @@ fun parseUnifiedDiff(diff: String): List<DiffFile> {
         lines = mutableListOf()
     }
 
-    diff.replace("\r\n", "\n").lines().forEach { line ->
+    diff.replace("\r\n", "\n").lines().forEach { raw ->
+        // The gateway's inline diff is the CLI's own coloured output: drop the colour, keep the line.
+        val line = ANSI.replace(raw, "")
         when {
+            // `  ┊ review diff` is the CLI's caption above the diff; it isn't part of it.
+            line.trimStart().startsWith("┊") -> {}
             // `diff --git a/x b/x` opens a file too; the path on its right is the one to show.
             line.startsWith("diff --git ") -> {
                 flush()
                 path = GIT_HEADER.find(line)?.groupValues?.getOrNull(4)?.removePrefix("b/")?.trim().orEmpty()
                 oldPath = ""
+                inHunk = false
+            }
+            // The gateway also names a file as `a/x → b/x`, with no `---`/`+++` pair at all.
+            ARROW_HEADER.matches(line) -> {
+                flush()
+                oldPath = headerPath(line.substringBefore(" → "))
+                path = headerPath(line.substringAfter(" → "))
                 inHunk = false
             }
             // A new file starts: whatever was gathered belongs to the one before.
@@ -104,6 +115,12 @@ private val HUNK = Regex("""@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?""")
 
 /** `diff --git a/x b/x` → the two paths, unquoted only as far as Git quotes nothing here. */
 private val GIT_HEADER = Regex("""^diff --git ("?)(.+?)\1 ("?)(.+?)\1$""")
+
+/** The gateway's own header for an inline diff: `a/src/x.kt → b/src/x.kt`. */
+private val ARROW_HEADER = Regex("""^\s*[ab]/.+\s→\s[ab]/.+$""")
+
+/** Colour the CLI wrapped around its diff: not part of what a phone shows. */
+private val ANSI = Regex("""\u001B\[[0-9;?]*[a-zA-Z]""")
 
 /** The language a diff's [path] is written in, for coloring: its extension, or its name when it has none. */
 fun languageOfPath(path: String): String? {

@@ -136,6 +136,8 @@ data class SessionMessage(
     val timestamp: Double? = null,
     val reasoning: String? = null,
     @SerialName("display_kind") val displayKind: String? = null,
+    /** Rendering hints the gateway stores beside a row; a tool row's diff lives here. */
+    @SerialName("display_metadata") val displayMetadata: JsonElement? = null,
     /** The session the row is stored under: an ancestor's id for rows from before a compression. */
     @SerialName("session_id") val sessionId: String? = null,
     /** False for rows a compression archived; the live agent no longer holds them. */
@@ -166,6 +168,13 @@ data class SessionMessage(
 
     /** Rows the gateway marks for storage only (compaction wrappers, seeded context). */
     val isHidden: Boolean get() = displayKind == "hidden"
+
+    /**
+     * The unified diff this row's tool call produced, as the gateway rendered it. A file edit stores it under
+     * `display_metadata.tool_result_metadata.inline_diff`; the row's own content is the tool's JSON result,
+     * which only `patch` also carries a diff in.
+     */
+    val inlineDiff: String? get() = displayMetadata.path("tool_result_metadata", "inline_diff")
 }
 
 /** One `tool_calls[]` entry; [arguments] is usually JSON text. */
@@ -180,6 +189,13 @@ data class SessionMessagesPage(
 private val IMAGE_PART_TYPES = setOf("image_url", "image", "input_image")
 
 private fun JsonElement?.stringOrNull(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+
+/** Walks nested objects and returns the string at the end of [keys], or null if any step is missing. */
+private fun JsonElement?.path(vararg keys: String): String? {
+    var at: JsonElement? = this
+    for (key in keys) at = (at as? JsonObject)?.get(key) ?: return null
+    return at.stringOrNull()?.takeIf { it.isNotBlank() }
+}
 
 /** Strings pass through; OpenAI-style parts arrays join their `text` parts; anything else is dropped. */
 private fun JsonElement?.plainText(): String = when (this) {

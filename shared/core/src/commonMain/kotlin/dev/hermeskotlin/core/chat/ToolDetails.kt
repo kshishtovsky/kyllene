@@ -45,6 +45,16 @@ internal object ToolDetails {
         }
     }
 
+    /** The diff `patch` puts in its own result (`{"success":true,"diff":"--- a/…"}`), when it's there. */
+    fun diff(result: JsonElement?): String? {
+        val obj = when (result) {
+            is JsonObject -> result
+            is JsonPrimitive -> result.contentOrNull?.let { runCatching { Json.parseToJsonElement(unwrapUntrusted(it)) }.getOrNull() } as? JsonObject
+            else -> null
+        } ?: return null
+        return (obj["diff"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+    }
+
     /** A result that reports a failure: an error, `success: false` or a non-zero exit code. */
     fun failed(result: JsonElement?): Boolean {
         val obj = when (result) {
