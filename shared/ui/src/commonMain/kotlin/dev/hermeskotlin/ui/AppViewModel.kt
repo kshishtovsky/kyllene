@@ -96,10 +96,11 @@ class AppViewModel(
     private val seen: SeenStore? = null,
     /** Each gateway's Inbox kept on the phone, which goes with the gateway. */
     private val inbox: InboxStore? = null,
-    /** Aliases picked on the Connect screen before their gateway is saved; saved gateways carry their own. */
-    private val certs: ClientCertAliases,
     /** Wi-Fi coming and going, which a socket opened on the old network never notices. */
     private val network: NetworkChanges = NoNetworkChanges,
+    /** Aliases picked on the Connect screen before their gateway is saved; saved gateways carry their own.
+     *  Last on purpose: AppViewModelInjectionTest pins it there. */
+    private val certs: ClientCertAliases,
 ) : ViewModel() {
 
     private val _route = MutableStateFlow<Route>(Route.Loading)
