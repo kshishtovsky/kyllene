@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -149,19 +150,43 @@ internal fun DefaultMarkdownTypography.withTextStyle(style: TextStyle?): Default
     )
 }
 
+/** How often a streaming reply is reprinted: the eye cannot read faster, and each reprint is a full parse and
+ * layout of everything said so far, so a token arriving ten times a second would cost ten parses for nothing. */
+private const val STREAM_FRAME_MS = 80L
+
+/**
+ * [text] as it is repainted while [streaming], held back to [STREAM_FRAME_MS]: a token stream lands far more often
+ * than a screen refreshes, and on a long reply every one of those landings would cost a whole-document parse.
+ * The last value always arrives when the turn ends, because the caller stops streaming then.
+ */
+@Composable
+internal fun heldForRead(text: String, streaming: Boolean): String {
+    if (!streaming) return text
+    val latest by rememberUpdatedState(text)
+    val shown = remember { mutableStateOf(text) }
+    LaunchedEffect(streaming) {
+        while (true) {
+            delay(STREAM_FRAME_MS)
+            if (shown.value != latest) shown.value = latest
+        }
+    }
+    return shown.value
+}
+
 /**
  * GitHub-flavoured Markdown in the app's type and colors. Fenced code gets a language label, syntax
  * colors, horizontal scrolling (or wrapping, per [LocalCodeWrap]) and a copy button. TeX math between
- * `$…$`, `\(…\)`, `$$…$$` or `\[…\]` is typeset (see [MathMarkup]). [streaming] parses off the main thread
- * and keeps the previous render while text grows; settled text parses synchronously so list items don't
- * change height after they appear. [textStyle] keeps blocks compact, for folded reasoning summaries;
+ * `$…$`, `\(…\)`, `$$…$$` or `\[…\]` is typeset (see [MathMarkup]). [streaming] parses off the main thread,
+ * keeps the previous render while text grows and repaints at a readable rate rather than once per token (see
+ * [heldForRead]); settled text parses synchronously so list items don't change height after they appear. [textStyle] keeps blocks compact, for folded reasoning summaries;
  * headings use weight rather than size and code keeps its monospace font.
  */
 @Composable
 fun MarkdownText(text: String, modifier: Modifier = Modifier, streaming: Boolean = false, textStyle: TextStyle? = null) {
-    val rtl = remember(text) { Bidi.prefersRightToLeft(text) }
-    val prepared = remember(text) {
-        val parsed = Bidi.isolateInlineCode(MathMarkup.prepare(text), rightToLeft = rtl)
+    val shown = heldForRead(text, streaming)
+    val rtl = remember(shown) { Bidi.prefersRightToLeft(shown) }
+    val prepared = remember(shown) {
+        val parsed = Bidi.isolateInlineCode(MathMarkup.prepare(shown), rightToLeft = rtl)
         // An Arabic sentence also needs the dates, amounts, identifiers and URLs inside it kept whole.
         if (rtl) Bidi.isolateLtrRuns(parsed) else parsed
     }
