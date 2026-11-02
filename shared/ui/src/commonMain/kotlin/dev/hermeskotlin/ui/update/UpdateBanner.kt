@@ -95,6 +95,7 @@ fun UpdateBanner(modifier: Modifier = Modifier) {
     val installer = LocalUpdateInstaller.current?.takeIf { update.downloadUrl != null }
     val scope = rememberCoroutineScope()
     var installing by remember(update) { mutableStateOf(false) }
+    var failed by remember(update) { mutableStateOf(false) }
     val shape = RoundedCornerShape(Theme[radii][radiusMedium])
     val tint = Theme[colors][accent]
     Column(
@@ -109,7 +110,8 @@ fun UpdateBanner(modifier: Modifier = Modifier) {
             Column(Modifier.weight(1f).padding(top = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("Version ${update.version} is out", style = Theme[typography][bodySmall], color = Theme[colors][text])
                 Text(
-                    "Install it over this one; your sign-in and settings stay.",
+                    if (failed) "The download broke off. Tap to try again, or open the release page."
+                    else "Install it over this one; your sign-in and settings stay.",
                     style = Theme[typography][caption],
                     color = Theme[colors][textSecondary],
                 )
@@ -121,17 +123,20 @@ fun UpdateBanner(modifier: Modifier = Modifier) {
         Button(
             when {
                 installing -> "Downloading…"
+                failed -> "Open release page"
                 installer != null -> "Install"
                 update.downloadUrl != null -> "Download"
                 else -> "Open release"
             },
             onClick = {
-                if (installer == null) {
+                if (installer == null || failed) {
+                    // A jump to the browser hides the failure, so the second tap is the one that asks for it.
                     uriHandler.openUri(update.downloadUrl ?: update.pageUrl)
                 } else if (!installing) {
                     installing = true
+                    failed = false
                     scope.launch {
-                        if (!installer.install(update)) uriHandler.openUri(update.downloadUrl ?: update.pageUrl)
+                        failed = !installer.install(update)
                         installing = false
                     }
                 }
