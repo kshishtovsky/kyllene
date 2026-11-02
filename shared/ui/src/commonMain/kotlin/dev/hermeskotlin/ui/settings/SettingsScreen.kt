@@ -122,7 +122,6 @@ import com.composables.icons.lucide.LogOut
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircle
 import com.composables.icons.lucide.MessageSquarePlus
-import com.composables.icons.lucide.MessagesSquare
 import com.composables.icons.lucide.Moon
 import com.composables.icons.lucide.Phone
 import com.composables.icons.lucide.RefreshCw
@@ -827,14 +826,6 @@ internal fun SettingsView(
                     if (settingShown("Check for updates")) UpdateBanner(Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
                     Divider()
                     InfoRow("Gateway", info.version?.let { "Hermes $it" } ?: "Checking…")
-                    Divider()
-                    val uriHandler = LocalUriHandler.current
-                    NavRow(
-                        title = "Join the Discord",
-                        detail = "Get help, report bugs, suggest features and hear about new releases.",
-                        icon = Lucide.MessagesSquare,
-                        onClick = { uriHandler.openUri(DISCORD_INVITE) },
-                    )
                 }
             } }
         }
@@ -860,9 +851,6 @@ internal fun SettingsView(
         )
     }
 }
-
-/** The Kyllene community server; the invite never expires. */
-private const val DISCORD_INVITE = "https://discord.gg/wCtyvQ3KcM"
 
 /** The Phone tools row's line: off, or how many tools the agent may use. */
 private fun phoneToolsSummary(settings: AppSettings): String {
