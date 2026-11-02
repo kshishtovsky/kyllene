@@ -70,6 +70,8 @@ import dev.hermeskotlin.ui.sessions.ConfigView
 import dev.hermeskotlin.core.config.ConfigCatalog
 import dev.hermeskotlin.core.config.ConfigEntry
 import dev.hermeskotlin.ui.sessions.ChoiceSheet
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonElement
 import dev.hermeskotlin.ui.sessions.ScheduledActions
 import dev.hermeskotlin.ui.inbox.FollowView
@@ -696,6 +698,7 @@ private object PreviewScheduledActions : ScheduledActions {
 
 private class PreviewRoomActions : RoomActions {
     override val composer = TextFieldState()
+    override val dictation: StateFlow<DictationState> = MutableStateFlow(DictationState())
     override fun send() = Unit
     override fun stop() = Unit
     override fun loadEarlier() = Unit

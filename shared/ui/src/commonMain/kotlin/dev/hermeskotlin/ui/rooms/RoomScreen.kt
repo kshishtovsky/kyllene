@@ -157,6 +157,16 @@ import dev.hermeskotlin.ui.chat.TopBar
 import dev.hermeskotlin.ui.sessions.ListNotice
 import dev.hermeskotlin.ui.sessions.ListSpinner
 import dev.hermeskotlin.ui.sessions.MessageBanner
+import dev.hermeskotlin.ui.LocalAppSettings
+import dev.hermeskotlin.ui.hasVoice
+import dev.hermeskotlin.ui.chat.DictationButton
+import dev.hermeskotlin.ui.voice.DictationState
+import dev.hermeskotlin.ui.voice.briefError
+import dev.hermeskotlin.ui.voice.rememberMicrophonePermission
+import kotlinx.coroutines.flow.StateFlow
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import dev.hermeskotlin.ui.rememberChangingConfigurations
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -182,6 +192,11 @@ fun RoomScreen(
 interface RoomActions {
     /** What the user is typing to the room. */
     val composer: TextFieldState
+    /** The room's dictation, for the mic beside Send. */
+    val dictation: StateFlow<DictationState>
+    fun toggleDictation() {}
+    fun dismissDictationError() {}
+    fun cancelDictation() {}
     fun addAttachments(picked: List<OutgoingAttachment>, draftKey: Int) {}
     fun removeAttachment(id: String) {}
     fun attachmentError(message: String, draftKey: Int) {}
@@ -206,6 +221,10 @@ internal fun RoomView(
     onOpenFile: (String?, GatewayFile) -> Unit = { _, _ -> },
     keysEnabled: Boolean = true,
 ) {
+    val dictation by viewModel.dictation.collectAsStateWithLifecycle()
+    // Dictation stops when the app leaves the room; a turn of the phone isn't leaving it.
+    val changingConfigurations = rememberChangingConfigurations()
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (!changingConfigurations()) viewModel.cancelDictation() }
     var ask by remember { mutableStateOf<RoomAsk?>(null) }
     RoomAskDialogs(ask, onDismiss = { ask = null }, onRename = viewModel::renameRoom, onDelete = viewModel::deleteRoom)
     Box(
@@ -275,6 +294,10 @@ internal fun RoomView(
         }
         room.notice?.let { message ->
             MessageBanner(message, onDismiss = viewModel::dismissRoomNotice, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp))
+        }
+        // What the last dictation couldn't do: nothing was heard, or the microphone was busy.
+        dictation.error?.let { message ->
+            MessageBanner(briefError(message), onDismiss = viewModel::dismissDictationError, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp))
         }
     }
 }
@@ -512,6 +535,13 @@ private fun PendingActions(room: OpenRoom, onApprove: (RoomPendingAction, String
 @Composable
 private fun RoomComposer(room: OpenRoom, viewModel: RoomActions, mentions: RoomMentionList, keysEnabled: Boolean) {
     val hasText = viewModel.composer.text.isNotBlank() || room.attachments.isNotEmpty()
+    val dictation by viewModel.dictation.collectAsStateWithLifecycle()
+    val microphone = rememberMicrophonePermission()
+    val dictate: () -> Unit = {
+        microphone.withMicrophone(
+            onDenied = { viewModel.attachmentError("Dictation needs the microphone. Allow it in Android's settings.", room.draftKey) },
+        ) { viewModel.toggleDictation() }
+    }
     var attachOpen by remember(room.draftKey) { mutableStateOf(false) }
     // A file read belongs to this opening, even if another room opens while it finishes.
     val picker = key(viewModel, room.draftKey) {
@@ -628,6 +658,10 @@ private fun RoomComposer(room: OpenRoom, viewModel: RoomActions, mentions: RoomM
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(start = 4.dp, end = 8.dp),
             )
+            // The chat's mic, in the chat's place: hidden on a desktop and when dictation is off in Settings.
+            if (hasVoice && (LocalAppSettings.current.dictation || dictation.active)) {
+                DictationButton(dictation, onClick = dictate, enabled = !room.sending)
+            }
             if (room.working) {
                 if (hasText) SendButton(SendIcon.Send, onClick = viewModel::send, enabled = !room.sending)
                 SendButton(SendIcon.Stop, onClick = viewModel::stop, enabled = true)

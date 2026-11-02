@@ -12,6 +12,16 @@ import dev.hermeskotlin.core.rooms.Room
 import dev.hermeskotlin.core.rooms.RoomLine
 import dev.hermeskotlin.core.rooms.RoomSeenStore
 import dev.hermeskotlin.core.rooms.RoomsApi
+import dev.hermeskotlin.core.voice.AudioApi
+import dev.hermeskotlin.core.voice.DeviceDictation
+import dev.hermeskotlin.core.voice.VoiceRecorder
+import dev.hermeskotlin.core.voice.VoiceActivity
+import dev.hermeskotlin.core.voice.Recording
+import dev.hermeskotlin.core.voice.SpeechPlayer
+import dev.hermeskotlin.core.voice.SpokenAudio
+import dev.hermeskotlin.core.voice.NoDeviceDictation
+import dev.hermeskotlin.core.settings.DictationEngine
+import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.core.rpc.RpcTransport
 import dev.hermeskotlin.core.storage.InMemoryKeyValueStore
 import io.ktor.client.engine.mock.MockEngine
@@ -102,10 +112,25 @@ class RoomsViewModelTest {
         fun sent(method: String): List<JsonObject> = requests.filter { it.first == method }.map { it.second }
     }
 
+    private object NoRecorder : VoiceRecorder {
+        override suspend fun record(activity: VoiceActivity, onLevel: (Float) -> Unit, onSpeech: () -> Unit): Recording =
+            error("not recording in tests")
+
+        override fun finish() = Unit
+    }
+
+    private object NoPlayer : SpeechPlayer {
+        override suspend fun play(audio: SpokenAudio) = Unit
+    }
+
     /** What the user has seen in each room; shared by a test's view models, as the app's single store is. */
     private val seenStore = RoomSeenStore(InMemoryKeyValueStore())
 
-    private suspend fun viewModel(socket: RoomsGateway): RoomsViewModel {
+    private suspend fun viewModel(
+        socket: RoomsGateway,
+        device: DeviceDictation = NoDeviceDictation,
+        settings: SettingsStore? = null,
+    ): RoomsViewModel {
         val config = MockEngineConfig()
         config.dispatcher = dispatcher
         config.addHandler { respond("""{"ticket":"T","ttl_seconds":30}""", HttpStatusCode.OK, json) }
@@ -114,7 +139,11 @@ class RoomsViewModelTest {
         val connection = GatewayConnection(AuthApi(client, cookies), { _, _ -> socket }, CoroutineScope(dispatcher))
         connection.start(gateway.gatewayUrl)
         connection.state.first { it is ConnectionState.Connected }
-        return RoomsViewModel(RoomsApi(connection), connection, seenStore)
+        return RoomsViewModel(
+            RoomsApi(connection), connection, seenStore,
+            AudioApi(client), NoRecorder, NoPlayer, CoroutineScope(dispatcher), device,
+            settings ?: SettingsStore(InMemoryKeyValueStore(), CoroutineScope(dispatcher)),
+        )
     }
 
     /** The answers of a quiet room: empty state and log, whatever [roomId] is asked about. */
@@ -144,6 +173,29 @@ class RoomsViewModelTest {
         bind(gateway.gatewayUrl); setVisible(true)
         state.first { !it.loading }; open(roomA)
         opened.first { it?.loading == false }
+    }
+
+    @Test
+    fun dictationPutsTheSpokenWordsInTheRoomComposer() = runTest(dispatcher) {
+        val said = object : DeviceDictation {
+            override fun available() = true
+            override suspend fun listen(onPartial: (String) -> Unit, onLevel: (Float) -> Unit) = "who else is here"
+            override fun finish() = Unit
+        }
+        val settings = SettingsStore(InMemoryKeyValueStore(), CoroutineScope(dispatcher))
+        settings.update { it.copy(dictationEngine = DictationEngine.Device) }
+        val vm = viewModel(RoomsGateway(CoroutineScope(dispatcher)) { m, p -> quietRoom(m, p) ?: "{}" }, device = said, settings = settings)
+        vm.bind(gateway.gatewayUrl)
+        vm.open(Room(roomId = "a", name = "A"))
+        vm.composer.setTextAndPlaceCursorAtEnd("typed: ")
+        try {
+            vm.toggleDictation()
+            runCurrent()
+            assertEquals("typed: who else is here", vm.composer.text.toString())
+        } finally {
+            vm.close()
+            vm.setVisible(false)
+        }
     }
 
     @Test

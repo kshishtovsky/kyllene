@@ -26,6 +26,16 @@ import dev.hermeskotlin.core.rooms.mergeRoomEvents
 import dev.hermeskotlin.core.rooms.messageText
 import dev.hermeskotlin.core.rooms.roomLines
 import dev.hermeskotlin.core.rpc.RpcException
+import dev.hermeskotlin.core.settings.AppSettings
+import dev.hermeskotlin.core.settings.DictationEngine
+import dev.hermeskotlin.core.settings.SettingsStore
+import dev.hermeskotlin.core.voice.AudioApi
+import dev.hermeskotlin.core.voice.DeviceDictation
+import dev.hermeskotlin.core.voice.SpeechPlayer
+import dev.hermeskotlin.core.voice.VoiceRecorder
+import dev.hermeskotlin.ui.voice.DictationState
+import dev.hermeskotlin.ui.voice.VoiceController
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -112,6 +122,12 @@ class RoomsViewModel(
     private val api: RoomsApi,
     private val connection: GatewayConnection,
     private val seen: RoomSeenStore,
+    audio: AudioApi,
+    recorder: VoiceRecorder,
+    player: SpeechPlayer,
+    appScope: CoroutineScope,
+    deviceDictation: DeviceDictation,
+    private val settings: SettingsStore,
 ) : ViewModel(), RoomActions {
 
     private val _state = MutableStateFlow(RoomsUiState())
@@ -124,6 +140,11 @@ class RoomsViewModel(
 
     /** The open room's composer. */
     override val composer = TextFieldState()
+
+    /** A room has no profile of its own, so dictation takes the gateway's speech-to-text as the default profile has it. */
+    private val voice = VoiceController(audio, recorder, player, viewModelScope, appScope, deviceDictation = deviceDictation)
+
+    override val dictation: StateFlow<DictationState> get() = voice.dictation
 
     private val gateway = MutableStateFlow<GatewayUrl?>(null)
 
@@ -282,6 +303,8 @@ class RoomsViewModel(
         earlierWindow = null
         openGeneration++
         composer.clearText()
+        // The microphone belongs to the room that was open, not to the next one.
+        voice.cancelDictation()
     }
 
     /**
@@ -377,6 +400,38 @@ class RoomsViewModel(
     override fun attachmentError(message: String, draftKey: Int) {
         _opened.update { open -> if (open?.draftKey == draftKey) open.copy(notice = message) else open }
     }
+
+    /** Dictates into the composer, or finishes the dictation in progress. */
+    override fun toggleDictation() {
+        val url = gateway.value ?: return
+        if (voice.dictation.value.recording) return voice.finishDictation()
+        val engine = (settings.settings.value ?: AppSettings()).dictationEngine
+        val typed = composer.text.toString()
+        // The words so far show in the composer as they're said, unless the person edits it meanwhile.
+        var shown = typed
+        fun withSpoken(base: String, spoken: String) = if (base.isBlank()) spoken else "${base.trimEnd()} $spoken"
+        voice.startDictation(
+            url,
+            null,
+            engine,
+            onPartial = { partial ->
+                if (composer.text.toString() == shown) {
+                    shown = withSpoken(typed, partial)
+                    composer.setTextAndPlaceCursorAtEnd(shown)
+                }
+            },
+            // Cancelled (another room, the app went away): the half-said words go, what was typed stays.
+            onCancelled = { if (shown != typed && composer.text.toString() == shown) composer.setTextAndPlaceCursorAtEnd(typed) },
+        ) { text ->
+            val current = composer.text.toString()
+            composer.setTextAndPlaceCursorAtEnd(withSpoken(if (current == shown) typed else current, text))
+        }
+    }
+
+    override fun dismissDictationError() = voice.dismissDictationError()
+
+    /** Herald went out of sight: nothing should still be listening. */
+    override fun cancelDictation() = voice.cancelDictation()
 
     /** Uploads the selected files, then posts one idempotent room event. */
     override fun send() {
