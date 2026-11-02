@@ -66,6 +66,8 @@ class AndroidVoiceRecorder(private val context: Context) : VoiceRecorder {
         // The video or music that was playing pauses here and picks itself back up in the finally below.
         val focus = MicAudioFocus(context)
         var elapsed = 0L
+        // Frames counted per recording, so the level's throttle starts over with the next one.
+        var frames = 0
         try {
             focus.take()
             record.startRecording()
@@ -83,7 +85,9 @@ class AndroidVoiceRecorder(private val context: Context) : VoiceRecorder {
                 elapsed += read * 1000L / SAMPLE_RATE
                 // Desktop measures 8-bit samples (±128) against 42; 16-bit samples are 256 times larger.
                 val level = min(1.0, sqrt(sum / read) / 256.0 / 42.0).toFloat()
-                onLevel(level)
+                // The indicator is drawn, not read: every third frame is 17 Hz, as smooth to the eye as 50, and a third
+                // of the redraws. What the end-of-speech check sees below stays on the frame.
+                if (frames++ % LEVEL_EVERY == 0) onLevel(level)
                 val heardBefore = endOfSpeech.heardSpeech
                 val done = endOfSpeech.onFrame(level, elapsed)
                 if (endOfSpeech.heardSpeech && !heardBefore) onSpeech()
@@ -141,6 +145,8 @@ class AndroidVoiceRecorder(private val context: Context) : VoiceRecorder {
             val pcm = ByteArrayOutputStream()
             var elapsed = 0L
             var tripped = false
+            // Frames counted per listening, so the level's throttle starts over with the next one.
+            var frames = 0
             try {
                 // Inside the try, so the recorder is let go whatever they do; one that won't switch on is done without.
                 if (AcousticEchoCanceler.isAvailable()) runCatching { AcousticEchoCanceler.create(record.audioSessionId) }.getOrNull()?.let(effects::add)
@@ -164,7 +170,8 @@ class AndroidVoiceRecorder(private val context: Context) : VoiceRecorder {
                     val level = min(1.0, sqrt(sum / read) / 256.0 / 42.0).toFloat()
                     if (tripped) {
                         pcm.write(bytes.array())
-                        onLevel(level)
+                        // Same throttle as above: the level is for the indicator, the frame itself for the barge-in.
+                        if (frames++ % LEVEL_EVERY == 0) onLevel(level)
                     } else {
                         preRoll.addLast(bytes.array())
                         if (preRoll.size > preRollFrames) preRoll.removeFirst()
@@ -219,6 +226,9 @@ class AndroidVoiceRecorder(private val context: Context) : VoiceRecorder {
         /** 20 ms frames: fine-grained enough for the silence timer. */
         const val FRAME_SAMPLES = SAMPLE_RATE / 50
         const val FRAME_MS = 20L
+
+        /** Every third frame reaches the listening indicator: drawn, not read, so 17 Hz looks like 50. */
+        const val LEVEL_EVERY = 3
     }
 }
 
