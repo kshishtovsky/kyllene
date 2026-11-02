@@ -93,6 +93,16 @@ class GatewayConnection(
         _state.value = ConnectionState.Idle
     }
 
+    /**
+     * Starts over on a network that just changed. The socket opened on the old one is dead, but a half-open
+     * connection sits there looking healthy, so waking a backoff would not be enough.
+     */
+    fun restart() {
+        val current = url ?: return
+        stop()
+        start(current)
+    }
+
     /** Skip the current backoff wait, or restart after [ConnectionState.Failed]. */
     fun retry() {
         val current = url ?: return

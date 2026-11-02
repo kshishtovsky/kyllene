@@ -15,10 +15,12 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 class GatewayConnectionTest {
@@ -44,6 +46,28 @@ class GatewayConnectionTest {
         val connected = connection.state.first { it is ConnectionState.Connected } as ConnectionState.Connected
         assertEquals("T", usedTicket)
         assertEquals("e1", connected.ready["replay_epoch"].toString().trim('"'))
+        connection.stop()
+    }
+
+    @Test
+    fun restartOpensAFreshSocketOnTheNetworkThatJustChanged() = runTest {
+        // A socket opened on the old network never reports itself dead, so the gateway has to be replaced, not woken.
+        val opened = mutableListOf<FakeTransport>()
+        val connection = GatewayConnection(auth(), { _, _ -> FakeTransport().also { opened += it } }, backgroundScope)
+
+        connection.start(url)
+        while (opened.isEmpty()) yield()
+        opened[0].push(FakeTransport.READY)
+        connection.state.first { it is ConnectionState.Connected }
+        assertEquals(1, opened.size)
+
+        connection.restart()
+        while (opened.size < 2) yield()
+        opened[1].push(FakeTransport.READY)
+        connection.state.first { it is ConnectionState.Connected }
+
+        assertEquals(2, opened.size)
+        assertNotSame(opened[0], opened[1])
         connection.stop()
     }
 

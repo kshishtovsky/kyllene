@@ -17,6 +17,8 @@ import dev.hermeskotlin.core.chat.DraftStart
 import dev.hermeskotlin.core.chat.LastChatStore
 import dev.hermeskotlin.core.connection.ConnectionState
 import dev.hermeskotlin.core.connection.GatewayConnection
+import dev.hermeskotlin.core.connection.NetworkChanges
+import dev.hermeskotlin.core.connection.NoNetworkChanges
 import dev.hermeskotlin.core.gateway.AccessTokens
 import dev.hermeskotlin.core.gateway.ClientCertAliases
 import dev.hermeskotlin.core.gateway.GatewayList
@@ -96,6 +98,8 @@ class AppViewModel(
     private val inbox: InboxStore? = null,
     /** Aliases picked on the Connect screen before their gateway is saved; saved gateways carry their own. */
     private val certs: ClientCertAliases,
+    /** Wi-Fi coming and going, which a socket opened on the old network never notices. */
+    private val network: NetworkChanges = NoNetworkChanges,
 ) : ViewModel() {
 
     private val _route = MutableStateFlow<Route>(Route.Loading)
@@ -171,6 +175,11 @@ class AppViewModel(
             connection.state.collect { state ->
                 if (state is ConnectionState.SessionExpired) onSessionExpired()
             }
+        }
+        viewModelScope.launch {
+            // A phone that moves between Wi-Fi and mobile data leaves a socket that looks alive and answers nothing;
+            // only a fresh connection finds the way out, which is why switching the radio used to be the fix.
+            network.changes().collect { if (_route.value is Route.Chat) connection.restart() }
         }
         viewModelScope.launch {
             _route.collect { cancelPendingCall() }

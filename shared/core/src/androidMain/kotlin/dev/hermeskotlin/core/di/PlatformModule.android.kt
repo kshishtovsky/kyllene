@@ -5,6 +5,8 @@ import dev.hermeskotlin.core.auth.LoopbackReceiver
 import dev.hermeskotlin.core.cache.KeystoreSealer
 import dev.hermeskotlin.core.cache.Sealer
 import dev.hermeskotlin.core.cache.offlineDatabase
+import dev.hermeskotlin.core.connection.AndroidNetworkChanges
+import dev.hermeskotlin.core.connection.NetworkChanges
 import dev.hermeskotlin.core.gateway.MtlsAppContext
 import dev.hermeskotlin.core.settings.WallpaperStore
 import dev.hermeskotlin.core.storage.FileBlobFile
@@ -29,6 +31,7 @@ import java.io.File
 
 actual val platformModule: Module = module {
     single<KeyValueStore> { EncryptedKeyValueStore(androidContext()) }
+    single<NetworkChanges> { AndroidNetworkChanges(androidContext()) }
     // The gateway engine's KeyChain lookup needs an application context at handshake time.
     single<Unit>(createdAtStart = true) { MtlsAppContext.context = androidContext() }
     // The browser sign-in comes back through this link; the app's manifest gives it to HeraldActivity.

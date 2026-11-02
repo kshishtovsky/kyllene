@@ -6,6 +6,8 @@ import dev.hermeskotlin.core.cache.KeystoreSealer
 import dev.hermeskotlin.core.cache.Sealer
 import dev.hermeskotlin.core.cache.offlineDatabase
 import dev.hermeskotlin.core.settings.WallpaperStore
+import dev.hermeskotlin.core.connection.NetworkChanges
+import dev.hermeskotlin.core.connection.NoNetworkChanges
 import dev.hermeskotlin.core.storage.FileBlobFile
 import dev.hermeskotlin.core.storage.FileKeyValueStore
 import dev.hermeskotlin.core.storage.KeyValueStore
@@ -23,6 +25,7 @@ import java.io.File
 
 actual val platformModule: Module = module {
     single<KeyValueStore> { FileKeyValueStore(File(appDataDir, "settings.json")) }
+    single<NetworkChanges> { NoNetworkChanges }
     // No app link to send the browser back to: its tab says it's done.
     single<LoopbackReceiver> { LoopbackHttpReceiver(returnUri = null) }
     single { WallpaperStore(FileBlobFile(File(appDataDir, "wallpaper.jpg")), get()) }
