@@ -36,27 +36,34 @@ class AndroidDeviceDictation(private val context: Context) : DeviceDictation {
 
     override suspend fun listen(onPartial: (String) -> Unit, onLevel: (Float) -> Unit): String = withContext(Dispatchers.Main) {
         finishRequested = false
-        val recognizers = buildList<() -> SpeechRecognizer> {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
-                add { SpeechRecognizer.createOnDeviceSpeechRecognizer(context) }
+        // The video or music that was playing pauses here and picks itself back up once the recognizer is done.
+        val focus = MicAudioFocus(context)
+        focus.take()
+        try {
+            val recognizers = buildList<() -> SpeechRecognizer> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+                    add { SpeechRecognizer.createOnDeviceSpeechRecognizer(context) }
+                }
+                services().forEach { component -> add { SpeechRecognizer.createSpeechRecognizer(context, component) } }
             }
-            services().forEach { component -> add { SpeechRecognizer.createSpeechRecognizer(context, component) } }
+            for (create in recognizers) {
+                // Stopped before anything was heard.
+                if (finishRequested) return@withContext ""
+                val recognizer = try {
+                    create()
+                } catch (_: RuntimeException) {
+                    continue
+                }
+                try {
+                    return@withContext listenWith(recognizer, onPartial, onLevel)
+                } catch (_: CantStart) {
+                    // Nothing was heard yet: the next recognizer may manage.
+                }
+            }
+            if (finishRequested) "" else throw DeviceDictationUnavailable()
+        } finally {
+            focus.drop()
         }
-        for (create in recognizers) {
-            // Stopped before anything was heard.
-            if (finishRequested) return@withContext ""
-            val recognizer = try {
-                create()
-            } catch (_: RuntimeException) {
-                continue
-            }
-            try {
-                return@withContext listenWith(recognizer, onPartial, onLevel)
-            } catch (_: CantStart) {
-                // Nothing was heard yet: the next recognizer may manage.
-            }
-        }
-        if (finishRequested) "" else throw DeviceDictationUnavailable()
     }
 
     override fun finish() {

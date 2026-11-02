@@ -35,7 +35,7 @@ import kotlin.math.sqrt
  * Records 16 kHz mono PCM with [AudioRecord] and hands it over as WAV, which every speech-to-text
  * provider takes. The level is Desktop's: RMS of the waveform, scaled so 1.0 is loud speech.
  */
-class AndroidVoiceRecorder : VoiceRecorder {
+class AndroidVoiceRecorder(private val context: Context) : VoiceRecorder {
 
     @Volatile private var finishRequested = false
 
@@ -63,8 +63,11 @@ class AndroidVoiceRecorder : VoiceRecorder {
         val frame = ShortArray(FRAME_SAMPLES)
         val bytes = ByteBuffer.allocate(FRAME_SAMPLES * 2).order(ByteOrder.LITTLE_ENDIAN)
         val endOfSpeech = EndOfSpeech(activity)
+        // The video or music that was playing pauses here and picks itself back up in the finally below.
+        val focus = MicAudioFocus(context)
         var elapsed = 0L
         try {
+            focus.take()
             record.startRecording()
             while (!finishRequested) {
                 ensureActive()
@@ -88,6 +91,7 @@ class AndroidVoiceRecorder : VoiceRecorder {
             }
         } finally {
             runCatching { record.stop() }
+            focus.drop()
             effects.forEach { it.release() }
             record.release()
             onLevel(0f)
