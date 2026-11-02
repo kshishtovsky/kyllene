@@ -1,5 +1,6 @@
 package dev.hermeskotlin.ui.chat
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -44,9 +47,9 @@ import dev.hermeskotlin.designsystem.caption
 import dev.hermeskotlin.designsystem.code
 import dev.hermeskotlin.designsystem.colors
 import dev.hermeskotlin.designsystem.components.CopyButton
+import dev.hermeskotlin.designsystem.components.ScrollbarBox
 import dev.hermeskotlin.designsystem.components.SyntaxColors
 import dev.hermeskotlin.designsystem.components.highlightedLine
-import dev.hermeskotlin.designsystem.components.verticalScrollWithBar
 import dev.hermeskotlin.designsystem.danger
 import dev.hermeskotlin.designsystem.dangerSoft
 import dev.hermeskotlin.designsystem.radii
@@ -67,7 +70,9 @@ import dev.hermeskotlin.designsystem.typography
  * The numbers, the sign and the hunk header hold their place; only the code slides sideways, every line of a file on
  * one shared scroll state and given the widest line's width, so dragging any row moves them all.
  *
- * Lines past [MAX_LINES] are cut: a gateway diff can be thousands of lines, and the phone needn't hold them all.
+ * The lines are a list: only those on screen are built and measured, where laying out a whole file at once stalled the
+ * frame it landed in. Lines past [MAX_LINES] are cut: a gateway diff can be thousands of lines, and the phone needn't
+ * hold them all.
  */
 @Composable
 internal fun DiffView(diff: String, title: String = "Changes", source: CommentSource? = null) {
@@ -88,25 +93,45 @@ internal fun DiffView(diff: String, title: String = "Changes", source: CommentSo
             ) {
                 // A row's tint reaches across the box even when its code is shorter.
                 val viewport = maxWidth
-                Column(Modifier.verticalScrollWithBar()) {
-                    if (files.isEmpty()) {
-                        // Not a diff at all: show what the tool said rather than nothing.
-                        Text(
-                            diff.trimEnd(),
-                            style = Theme[typography][code].copy(color = Theme[colors][textColor]),
-                            modifier = Modifier.defaultMinSize(minWidth = viewport).padding(10.dp),
-                        )
+                // A file's widths are measured here, since a row of the list sees only its own line.
+                val rows = files.map { file -> key(file.path) { rememberFileRows(file, viewport) } }
+                // One list for the box where it was one column, so the files still scroll together as they did.
+                ScrollbarBox { list ->
+                    LazyColumn(Modifier.fillMaxWidth(), state = list) {
+                        if (files.isEmpty()) {
+                            // Not a diff at all: show what the tool said rather than nothing.
+                            item {
+                                Text(
+                                    diff.trimEnd(),
+                                    style = Theme[typography][code].copy(color = Theme[colors][textColor]),
+                                    modifier = Modifier.defaultMinSize(minWidth = viewport).padding(10.dp),
+                                )
+                            }
+                        }
+                        // Each file's name stays put; only its lines move sideways, so the header can't slide away.
+                        rows.forEach { DiffFileBlock(it, viewport) }
                     }
-                    // Each file's name stays put; only its lines move sideways, so the header can't slide away.
-                    files.forEach { file -> key(file.path) { DiffFileBlock(file, viewport) } }
                 }
             }
         }
     }
 }
 
+/** Everything one file's rows draw with, measured once: the list builds a row at a time and can't measure the file. */
+private class FileRows(
+    val file: DiffFile,
+    val style: TextStyle,
+    val base: Color,
+    val palette: SyntaxColors,
+    val language: String?,
+    val gutter: Dp,
+    val codeWidth: Dp,
+    val twoSides: Boolean,
+    val sideways: ScrollState,
+)
+
 @Composable
-private fun DiffFileBlock(file: DiffFile, viewport: Dp) {
+private fun rememberFileRows(file: DiffFile, viewport: Dp): FileRows {
     val style = Theme[typography][code].copy(fontSize = 12.sp, lineHeight = 18.sp)
     val base = Theme[colors][textColor]
     val palette = if (Theme[colors][background].luminance() < 0.5f) SyntaxColors.Dark else SyntaxColors.Light
@@ -127,8 +152,13 @@ private fun DiffFileBlock(file: DiffFile, viewport: Dp) {
         } ?: 0
         maxOf(viewport - gutter, with(density) { widestCode.toDp() } + 16.dp)
     }
-    var shown = 0
-    Column(Modifier.fillMaxWidth()) {
+    return FileRows(file, style, base, palette, language, gutter, codeWidth, twoSides, sideways)
+}
+
+/** One file in the diff's list: its name, then its lines, each a row the list builds as it comes into view. */
+private fun LazyListScope.DiffFileBlock(rows: FileRows, viewport: Dp) {
+    val file = rows.file
+    item(contentType = FileNameType) {
         Row(
             Modifier
                 .defaultMinSize(minWidth = viewport)
@@ -148,29 +178,40 @@ private fun DiffFileBlock(file: DiffFile, viewport: Dp) {
             if (file.added > 0) Text("+${file.added}", style = Theme[typography][caption], color = Theme[colors][success])
             if (file.removed > 0) Text("−${file.removed}", style = Theme[typography][caption], color = Theme[colors][danger])
         }
-        file.lines.forEach { line ->
-            if (shown >= MAX_LINES) return@forEach
-            shown++
-            when (line.kind) {
-                // The hunk header stays put and reads on one line; the numbers it carries are the point of it.
-                DiffLineKind.Hunk -> Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(Theme[colors][surface])
-                        .padding(horizontal = 10.dp, vertical = 3.dp),
-                ) {
-                    BasicText(
-                        line.text,
-                        style = style.copy(color = Theme[colors][textTertiary]),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                DiffLineKind.Note -> Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp)) {
-                    Text(line.text, style = style.copy(color = Theme[colors][textTertiary]))
-                }
-                else -> DiffRow(line, style, base, palette, language, gutter, codeWidth, sideways, twoSides)
+    }
+    val lines = file.lines.take(MAX_LINES)
+    // The item's own index is its key, so a line keeps its slot as long as the diff it came from stands.
+    items(lines.size, contentType = { lines[it].kind }) { index ->
+        val line = lines[index]
+        when (line.kind) {
+            // The hunk header stays put and reads on one line; the numbers it carries are the point of it.
+            DiffLineKind.Hunk -> Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Theme[colors][surface])
+                    .padding(horizontal = 10.dp, vertical = 3.dp),
+            ) {
+                BasicText(
+                    line.text,
+                    style = rows.style.copy(color = Theme[colors][textTertiary]),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
+            DiffLineKind.Note -> Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp)) {
+                Text(line.text, style = rows.style.copy(color = Theme[colors][textTertiary]))
+            }
+            else -> DiffRow(
+                line,
+                rows.style,
+                rows.base,
+                rows.palette,
+                rows.language,
+                rows.gutter,
+                rows.codeWidth,
+                rows.sideways,
+                rows.twoSides,
+            )
         }
     }
 }
@@ -185,7 +226,7 @@ private fun DiffRow(
     language: String?,
     gutter: Dp,
     codeWidth: Dp,
-    sideways: androidx.compose.foundation.ScrollState,
+    sideways: ScrollState,
     twoSides: Boolean,
 ) {
     val added = line.kind == DiffLineKind.Added
@@ -230,3 +271,6 @@ private fun DiffRow(
 
 /** A diff longer than this is cut; the box scrolls, and the phone stays quick. */
 private const val MAX_LINES = 400
+
+// A file's name and a line lay out differently, so the list keeps their slots apart.
+private const val FileNameType = "file-name"
