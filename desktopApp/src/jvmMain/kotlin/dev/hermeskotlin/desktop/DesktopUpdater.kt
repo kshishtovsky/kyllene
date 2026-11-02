@@ -31,7 +31,7 @@ internal object DesktopUpdater : UpdateInstaller {
     /** Where jpackage's launcher put this copy of Herald; null when it wasn't installed. */
     private val launcher: String? = System.getProperty("jpackage.app-path")?.takeIf { File(it).isFile }
 
-    override suspend fun install(update: AppUpdate): Boolean {
+    override suspend fun install(update: AppUpdate, onProgress: (Float) -> Unit): Boolean {
         val url = update.downloadUrl ?: return false
         if (launcher == null) return false
         val file = try {
