@@ -100,6 +100,9 @@ jobs:
 
           Once Kyllene is installed, Settings → About offers each new version; on Windows, Install updates it in place.
           EOF
+          # A tag re-pointed at a newer commit (after a failed run) finds its own earlier draft, whose assets then
+          # collide with these: the draft goes first, the tag stays.
+          gh release delete "$GITHUB_REF_NAME" --yes --cleanup-tag=false 2>/dev/null || true
           gh release create "$GITHUB_REF_NAME" "kyllene-$v.apk" "kyllene-$v.apk.sha256" --draft --generate-notes --notes-file which-apk.md --title "$GITHUB_REF_NAME"
           for abi in arm64-v8a armeabi-v7a x86_64 x86; do gh release upload "$GITHUB_REF_NAME" "kyllene-${v}_$abi.apk" "kyllene-${v}_$abi.apk.sha256"; done
           gh release upload "$GITHUB_REF_NAME" "kyllene-wear-$v.apk" "kyllene-wear-$v.apk.sha256"
