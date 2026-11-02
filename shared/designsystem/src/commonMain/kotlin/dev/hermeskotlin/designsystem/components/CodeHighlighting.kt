@@ -130,7 +130,7 @@ object CodeHighlighter {
  * One line of code as colored text: each stretch in its token's colour. For callers outside this module, which
  * can't name the highlighter's own language type.
  */
-fun highlightedLine(text: String, language: String?, palette: SyntaxColors, base: Color): AnnotatedString {
+fun highlightedLine(text: String, language: String?, palette: SyntaxColors): AnnotatedString {
     val syntax = CodeHighlighter.language(language) ?: return AnnotatedString(text)
     if (text.isEmpty()) return AnnotatedString(text)
     val spans = CodeHighlighter.spans(text, syntax)

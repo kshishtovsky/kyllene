@@ -102,6 +102,8 @@ private fun DiffFileBlock(file: DiffFile, sideways: androidx.compose.foundation.
     // Numbers share a width per file, so the columns line up down the whole diff.
     val widest = remember(file) { file.lines.maxOfOrNull { maxOf(it.oldNumber ?: 0, it.newNumber ?: 0) }?.toString()?.length ?: 1 }
     val gutter = (widest * 7 + 10).dp
+    // A file that only gains lines has one number per line; a removal-only one shows the number it had.
+    val twoSides = file.removed > 0
     var shown = 0
     Column(Modifier.fillMaxWidth()) {
         Row(
@@ -115,7 +117,7 @@ private fun DiffFileBlock(file: DiffFile, sideways: androidx.compose.foundation.
             // The path on one line: a long one is cut at the front, where it says the least (the file name stays).
             BasicText(
                 file.path.ifEmpty { "changes" },
-                style = Theme[typography][code].copy(fontSize = 11.5.sp),
+                style = Theme[typography][code].copy(fontSize = 11.5.sp, color = Theme[colors][textSecondary]),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -140,13 +142,13 @@ private fun DiffFileBlock(file: DiffFile, sideways: androidx.compose.foundation.
                 DiffLineKind.Note -> Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp)) {
                     Text(line.text, style = style.copy(color = Theme[colors][textTertiary]))
                 }
-                else -> DiffRow(line, style, base, palette, language, gutter, sideways)
+                else -> DiffRow(line, style, base, palette, language, gutter, sideways, twoSides)
             }
         }
     }
 }
 
-/** One changed or unchanged line: both numbers, the sign, and the code in its colors over its row's tint. */
+/** One changed or unchanged line: its number, the sign, and the code in its colors over its row's tint. */
 @Composable
 private fun DiffRow(
     line: DiffLine,
@@ -156,6 +158,7 @@ private fun DiffRow(
     language: String?,
     gutter: androidx.compose.ui.unit.Dp,
     sideways: androidx.compose.foundation.ScrollState,
+    twoSides: Boolean,
 ) {
     val added = line.kind == DiffLineKind.Added
     val removed = line.kind == DiffLineKind.Removed
@@ -169,23 +172,24 @@ private fun DiffRow(
         removed -> Theme[colors][danger]
         else -> Theme[colors][textTertiary]
     }
-    val text = remember(line.text, language, palette) { highlightedLine(line.text, language, palette, base) }
+    val text = remember(line.text, language, palette) { highlightedLine(line.text, language, palette) }
     Row(Modifier.fillMaxWidth().background(tint)) {
-        Text(
+        // One gutter unless the file also loses lines: an insertion-only edit would print every number twice.
+        if (twoSides) Text(
             line.oldNumber?.toString().orEmpty(),
             style = style.copy(color = numberColor),
             textAlign = TextAlign.End,
             modifier = Modifier.widthIn(min = gutter).padding(end = 4.dp),
         )
         Text(
-            line.newNumber?.toString().orEmpty(),
+            (line.newNumber ?: line.oldNumber)?.toString().orEmpty(),
             style = style.copy(color = numberColor),
             textAlign = TextAlign.End,
             modifier = Modifier.widthIn(min = gutter).padding(end = 6.dp),
         )
         Text(if (added) "+" else if (removed) "-" else " ", style = style.copy(color = numberColor))
         Box(Modifier.weight(1f).horizontalScroll(sideways)) {
-            BasicText(text, style = style, softWrap = false, modifier = Modifier.padding(start = 6.dp, end = 10.dp))
+            BasicText(text, style = style.copy(color = base), softWrap = false, modifier = Modifier.padding(start = 6.dp, end = 10.dp))
         }
     }
 }
