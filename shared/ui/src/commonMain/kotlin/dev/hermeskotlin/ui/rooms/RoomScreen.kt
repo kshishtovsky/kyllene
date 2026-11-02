@@ -101,6 +101,7 @@ import dev.hermeskotlin.ui.chat.rememberAttachmentPicker
 import dev.hermeskotlin.ui.chat.AttachSheet
 import dev.hermeskotlin.ui.chat.ComposerTray
 import dev.hermeskotlin.ui.chat.SentAttachments
+import dev.hermeskotlin.ui.KeepScreenOn
 import dev.hermeskotlin.ui.LocalFocusHeld
 import dev.hermeskotlin.ui.Shortcut
 import dev.hermeskotlin.ui.ShortcutHandler
@@ -225,6 +226,8 @@ internal fun RoomView(
     // Dictation stops when the app leaves the room; a turn of the phone isn't leaving it.
     val changingConfigurations = rememberChangingConfigurations()
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (!changingConfigurations()) viewModel.cancelDictation() }
+    // Talking into the room, the screen waits for them to stop, as the chat's does.
+    KeepScreenOn(dictation.recording)
     var ask by remember { mutableStateOf<RoomAsk?>(null) }
     RoomAskDialogs(ask, onDismiss = { ask = null }, onRename = viewModel::renameRoom, onDelete = viewModel::deleteRoom)
     Box(
