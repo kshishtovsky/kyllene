@@ -41,26 +41,30 @@ class UpdateChecker(
     /** The latest release of [repo] (`owner/name`) when it is newer than [current], unless it was dismissed. */
     suspend fun check(repo: String, current: String): AppUpdate? {
         if (repo.isBlank() || parseVersion(current) == null) return null
-        val release = try {
-            // A renamed repo answers at its old name with a redirect; the client doesn't follow those itself.
-            var url = "$GITHUB_API/repos/$repo/releases/latest"
-            var response = latest(url)
-            repeat(MAX_REDIRECTS) {
-                if (response.status.value !in REDIRECTS) return@repeat
-                url = response.headers[HttpHeaders.Location]?.takeIf { it.startsWith("$GITHUB_API/") } ?: return null
-                response = latest(url)
-            }
-            if (!response.status.isSuccess()) return null
-            HermesJson.parseToJsonElement(response.bodyAsText()) as? JsonObject
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null
-        } ?: return null
+        // Once per launch: a connection this line resets on its first try would hide the update all session.
+        val release = release(repo) ?: release(repo) ?: return null
         val update = parseRelease(release, abis, installer) ?: return null
         if (!isNewer(update.version, current)) return null
         if (store.get(DISMISSED_KEY) == update.version) return null
         return update
+    }
+
+    /** The latest release's JSON, or null when the request failed for any reason. */
+    private suspend fun release(repo: String): JsonObject? = try {
+        // A renamed repo answers at its old name with a redirect; the client doesn't follow those itself.
+        var url = "$GITHUB_API/repos/$repo/releases/latest"
+        var response = latest(url)
+        repeat(MAX_REDIRECTS) {
+            if (response.status.value !in REDIRECTS) return@repeat
+            url = response.headers[HttpHeaders.Location]?.takeIf { it.startsWith("$GITHUB_API/") } ?: return null
+            response = latest(url)
+        }
+        if (!response.status.isSuccess()) return null
+        HermesJson.parseToJsonElement(response.bodyAsText()) as? JsonObject
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
     }
 
     /** Stops offering [version]; a later one is offered again. */
