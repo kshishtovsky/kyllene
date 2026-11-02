@@ -37,7 +37,10 @@ android {
         Properties().apply { file.inputStream().use(::load) }
     }
     // A published APK signed with a debug key wouldn't install over the real one, so a release fails instead.
-    if (keystore == null && releasesRepo.isNotEmpty()) error("releasesRepo is set but keystore.properties is missing")
+    // Only this module's release build needs the key: the desktop installers are configured by the same invocation
+    // and never sign an APK, so they would fail on a machine that has no keystore.
+    val signsApk = gradle.startParameter.taskNames.any { it.removePrefix(":").startsWith("androidApp:") && it.contains("Release") }
+    if (keystore == null && releasesRepo.isNotEmpty() && signsApk) error("releasesRepo is set but keystore.properties is missing")
     signingConfigs {
         if (keystore != null) create("release") {
             storeFile = file(keystore.getProperty("storeFile"))
