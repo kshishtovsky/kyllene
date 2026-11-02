@@ -1,6 +1,7 @@
 package dev.hermeskotlin.ui.assistant
 
 import dev.hermeskotlin.ui.imeVisible
+import dev.hermeskotlin.ui.schemeFor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -69,7 +70,6 @@ import com.composeunstyled.Text
 import com.composeunstyled.TextInput
 import com.composeunstyled.UnstyledIcon
 import com.composeunstyled.UnstyledTextField
-import com.composeunstyled.theme.ColorScheme
 import com.composeunstyled.theme.Theme
 import dev.hermeskotlin.core.chat.ChatMessage
 import dev.hermeskotlin.core.chat.ChatState
@@ -79,7 +79,6 @@ import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.core.settings.ThemeMode
 import dev.hermeskotlin.designsystem.AccentPalette
 import dev.hermeskotlin.designsystem.LocalAccentPalette
-import dev.hermeskotlin.designsystem.PureBlack
 import dev.hermeskotlin.designsystem.accent
 import dev.hermeskotlin.designsystem.accentSoft
 import dev.hermeskotlin.designsystem.accentText
@@ -163,11 +162,7 @@ fun AssistantPanel(
         ThemeMode.Light -> false
         ThemeMode.Dark -> true
     }
-    val scheme = when {
-        !dark -> ColorScheme.Light
-        settings.pureBlack -> PureBlack
-        else -> ColorScheme.Dark
-    }
+    val scheme = schemeFor(settings, dark)
     val density = LocalDensity.current
     val palette = AccentPalette.named(settings.accent)
     hermesTheme(palette)(scheme) {

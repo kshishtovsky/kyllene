@@ -37,17 +37,16 @@ import com.composables.icons.lucide.MicOff
 import com.composables.icons.lucide.Phone
 import com.composables.icons.lucide.PhoneOff
 import dev.hermeskotlin.designsystem.surface3
+import dev.hermeskotlin.ui.schemeFor
 import dev.hermeskotlin.ui.voice.VoicePhase
 import kotlinx.coroutines.delay
 import kotlin.time.TimeSource
 import com.composeunstyled.Text
 import com.composeunstyled.UnstyledIcon
-import com.composeunstyled.theme.ColorScheme
 import com.composeunstyled.theme.Theme
 import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.designsystem.AccentPalette
 import dev.hermeskotlin.designsystem.LocalAccentPalette
-import dev.hermeskotlin.designsystem.PureBlack
 import dev.hermeskotlin.designsystem.accent
 import dev.hermeskotlin.designsystem.background
 import dev.hermeskotlin.designsystem.body
@@ -71,7 +70,7 @@ import org.koin.compose.koinInject
 fun IncomingCallScreen(caller: String, why: String, onAnswer: () -> Unit, onDecline: () -> Unit) {
     val settings = koinInject<SettingsStore>().settings.collectAsState().value ?: return
     val palette = AccentPalette.named(settings.accent)
-    hermesTheme(palette)(if (settings.pureBlack) PureBlack else ColorScheme.Dark) {
+    hermesTheme(palette)(schemeFor(settings, dark = true)) {
         CompositionLocalProvider(LocalAccentPalette provides palette) {
             IncomingCallView(caller, why, onAnswer, onDecline)
         }
@@ -141,7 +140,7 @@ fun InCallScreen(model: PhoneCallModel) {
             delay(1_000)
         }
     }
-    hermesTheme(palette)(if (settings.pureBlack) PureBlack else ColorScheme.Dark) {
+    hermesTheme(palette)(schemeFor(settings, dark = true)) {
         CompositionLocalProvider(LocalAccentPalette provides palette) {
             InCallView(state, seconds, onMute = model::toggleMute, onEnd = model::hangUp)
         }

@@ -22,6 +22,8 @@ class ThemeColorsTest {
             assertEquals(allTokens, darkColors(palette.dark).keys, "${palette.name} dark")
             assertEquals(allTokens, pureBlackColors(palette.black).keys, "${palette.name} pure black")
         }
+        // Ayu is one scheme for every accent: it carries its own gold.
+        assertEquals(allTokens, ayuColors().keys, "ayu")
     }
 
     @Test

@@ -143,6 +143,7 @@ import dev.hermeskotlin.core.plugins.NextPromptApi
 import dev.hermeskotlin.core.push.PushStatus
 import dev.hermeskotlin.core.settings.AppSettings
 import dev.hermeskotlin.core.settings.CallTarget
+import dev.hermeskotlin.core.settings.DarkStyle
 import dev.hermeskotlin.core.settings.RunningSend
 import dev.hermeskotlin.core.settings.TextSize
 import dev.hermeskotlin.core.settings.ThemeMode
@@ -448,12 +449,20 @@ internal fun SettingsView(
                     // The launcher's icon is the phone's; the desktop keeps Herald's own.
                     if (!isDesktop) NavRow(title = "App icon", detail = appIcon.label, icon = Lucide.LayoutGrid, onClick = onOpenAppIcon)
                     if (!isDesktop) Divider()
-                    SwitchRow(
-                        title = "Pure black",
-                        detail = "True black backgrounds in dark mode, easier on OLED screens.",
-                        checked = settings.pureBlack,
-                        onCheckedChange = { on -> onUpdate { it.copy(pureBlack = on) } },
-                    )
+                    Field("Dark mode", detail = "Black is true black, easier on OLED screens; Ayu is Ayu's navy black and gold.") {
+                        SegmentedControl(
+                            options = DarkStyle.entries,
+                            selected = settings.darkStyle,
+                            onSelect = { style -> onUpdate { it.copy(darkStyle = style) } },
+                            optionLabel = {
+                                when (it) {
+                                    DarkStyle.Graphite -> "Default"
+                                    DarkStyle.Black -> "Black"
+                                    DarkStyle.Ayu -> "Ayu"
+                                }
+                            },
+                        )
+                    }
                     Divider()
                     SwitchRow(
                         title = "Glow",

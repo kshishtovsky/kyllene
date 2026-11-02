@@ -19,6 +19,9 @@ private val baseText = TextStyle(fontFamily = Geist, letterSpacing = (-0.005).em
 /** Dark with true black backgrounds, for OLED screens. */
 val PureBlack = ColorScheme("pure_black")
 
+/** Ayu dark: Ayu's navy-black ground and gold, for the people who run Ayu everywhere else. */
+val Ayu = ColorScheme("ayu")
+
 /**
  * The app theme in Herald blue. Light/dark follow the system unless a [ColorScheme] is passed:
  * `HermesTheme(ColorScheme.Dark) { ... }`, or [PureBlack]. [hermesTheme] gives it in another accent.
@@ -78,6 +81,15 @@ private fun buildHermesTheme(palette: AccentPalette) = buildThemeV2 {
         defaultContentColor = Palette.Text
         defaultIndication = rememberHoverIndication(Palette.Text, palette.black.accent)
         defaultTextSelectionColors = TextSelectionColors(palette.black.text, palette.black.text.copy(alpha = 0.35f))
+    }
+
+    // Ayu brings its own accent, so every accent palette draws it the same.
+    colorScheme(Ayu) {
+        val ayu = ayuColors()
+        properties[colors] = ayu
+        defaultContentColor = ayu.getValue(text)
+        defaultIndication = rememberHoverIndication(ayu.getValue(text), ayu.getValue(accent))
+        defaultTextSelectionColors = TextSelectionColors(ayu.getValue(text), ayu.getValue(text).copy(alpha = 0.35f))
     }
 
     defaultTextStyle = baseText.copy(fontSize = 15.sp, lineHeight = 22.5.sp)

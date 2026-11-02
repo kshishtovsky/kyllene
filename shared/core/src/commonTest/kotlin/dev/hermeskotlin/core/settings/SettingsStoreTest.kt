@@ -32,13 +32,13 @@ class SettingsStoreTest {
         val first = SettingsStore(disk, backgroundScope)
         assertEquals(AppSettings(), first.settings.filterNotNull().first())
 
-        first.update { it.copy(theme = ThemeMode.Dark, pureBlack = true, textSize = TextSize.Large) }
+        first.update { it.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Ayu, textSize = TextSize.Large) }
         advanceUntilIdle()
 
         val reopened = SettingsStore(disk, backgroundScope)
         val restored = reopened.settings.filterNotNull().first()
         assertEquals(ThemeMode.Dark, restored.theme)
-        assertEquals(true, restored.pureBlack)
+        assertEquals(DarkStyle.Ayu, restored.darkStyle)
         assertEquals(TextSize.Large, restored.textSize)
     }
 

@@ -14,6 +14,12 @@ import kotlinx.serialization.Serializable
 
 enum class ThemeMode { System, Light, Dark }
 
+/**
+ * The palette dark mode is drawn in: [Graphite] the app's own, [Black] true black for OLED screens, [Ayu] Ayu's
+ * navy black with its gold. Light mode is always the app's light scheme.
+ */
+enum class DarkStyle { Graphite, Black, Ayu }
+
 /** The accent [AppSettings.accent] starts with: Desktop's blue. */
 const val DEFAULT_ACCENT = "Blue"
 
@@ -61,8 +67,8 @@ enum class RunningSend { Steer, Queue, StopAndSend }
 @Serializable
 data class AppSettings(
     val theme: ThemeMode = ThemeMode.System,
-    /** Dark mode uses true black backgrounds (OLED). */
-    val pureBlack: Boolean = false,
+    /** What dark mode is drawn in; see [DarkStyle]. */
+    val darkStyle: DarkStyle = DarkStyle.Graphite,
     /**
      * The accent preset's name (the design system's `AccentPalette`). A string, not an enum, so a preset that a
      * newer version added reads as the default here instead of making the whole stored settings unreadable.

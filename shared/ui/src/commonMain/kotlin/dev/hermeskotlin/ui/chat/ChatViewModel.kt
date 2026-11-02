@@ -49,6 +49,7 @@ import dev.hermeskotlin.core.sessions.SeenStore
 import dev.hermeskotlin.core.sessions.SessionsApi
 import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.core.settings.AppSettings
+import dev.hermeskotlin.core.settings.DarkStyle
 import dev.hermeskotlin.core.settings.RunningSend
 import dev.hermeskotlin.core.settings.ThemeMode
 import dev.hermeskotlin.core.pet.PetApi
@@ -951,16 +952,21 @@ class ChatViewModel(
                 ThemeMode.Dark -> current.copy(theme = ThemeMode.System)
             }
             "light" -> current.copy(theme = ThemeMode.Light)
-            "dark" -> current.copy(theme = ThemeMode.Dark, pureBlack = false)
-            "black", "oled", "amoled" -> current.copy(theme = ThemeMode.Dark, pureBlack = true)
+            "dark" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Graphite)
+            "black", "oled", "amoled" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Black)
+            "ayu" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Ayu)
             "system", "auto", "default" -> current.copy(theme = ThemeMode.System)
-            else -> return chat.showCommandOutput("/skin", "Themes here: light, dark, black or system.", failed = true)
+            else -> return chat.showCommandOutput("/skin", "Themes here: light, dark, black, ayu or system.", failed = true)
         }
         settings.update { next }
         val name = when (next.theme) {
             ThemeMode.System -> "matches the system"
             ThemeMode.Light -> "light"
-            ThemeMode.Dark -> if (next.pureBlack) "black" else "dark"
+            ThemeMode.Dark -> when (next.darkStyle) {
+                DarkStyle.Black -> "black"
+                DarkStyle.Ayu -> "ayu"
+                DarkStyle.Graphite -> "dark"
+            }
         }
         chat.showCommandOutput("/skin", "Theme: $name.")
     }

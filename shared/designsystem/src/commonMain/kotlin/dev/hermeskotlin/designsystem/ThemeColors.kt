@@ -87,6 +87,40 @@ internal fun pureBlackColors(accentColors: AccentColors) = darkColors(
     accentColors, Color.Black, Palette.BlackSurface, Palette.BlackSurface2, Palette.BlackSurface3, Palette.BlackWell, Palette.BlackSheet,
 )
 
+/**
+ * Ayu's own colors, in every accent: a navy-black ground, warm off-white text and Ayu's gold, which is what the
+ * scheme is known for. It ignores the accent picker, unlike the app's own schemes.
+ */
+private val AyuAccent = AccentColors(
+    Color(0xFFE6B450), Color(0xFF0B0E14),
+    text = Color(0xFFFFB454), soft = Color(0xFFE6B450).copy(alpha = 0.14f),
+)
+
+/** Ayu dark: the same roles as dark, on Ayu's grounds, with its text warm and its reds and greens its own. */
+internal fun ayuColors() = darkColors(
+    AyuAccent,
+    bg = Color(0xFF0B0E14),
+    surfaceColor = Color(0xFF0F141C),
+    surface2Color = Color(0xFF151B26),
+    surface3Color = Color(0xFF1B2230),
+    wellColor = Color(0xFF090C11),
+    sheet = Color(0xFF10161F),
+) + mapOf(
+    thumb to Color(0xFF28313F),
+    text to Color(0xFFBFBDB6),
+    textSecondary to Color(0xFFA9A79F),
+    textTertiary to Color(0xFF828C9C),
+    textMuted to Color(0xFF657078),
+    inverse to Color(0xFFBFBDB6),
+    onInverse to Color(0xFF0B0E14),
+    danger to Color(0xFFF07178),
+    success to Color(0xFF7FD962),
+    warning to Color(0xFFFFB454),
+    dangerSoft to Color(0xFFF07178).copy(alpha = 0.14f),
+    successSoft to Color(0xFF7FD962).copy(alpha = 0.13f),
+    warningSoft to Color(0xFFFFB454).copy(alpha = 0.13f),
+)
+
 /** Dark and pure black share every role but the grounds they sit on. */
 internal fun darkColors(
     accentColors: AccentColors,

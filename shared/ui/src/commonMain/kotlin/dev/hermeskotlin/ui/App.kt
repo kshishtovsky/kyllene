@@ -32,11 +32,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composeunstyled.theme.ColorScheme
 import com.composeunstyled.theme.Theme
 import dev.hermeskotlin.core.settings.AppSettings
+import dev.hermeskotlin.core.settings.DarkStyle
 import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.core.settings.ThemeMode
 import dev.hermeskotlin.designsystem.AccentPalette
 import dev.hermeskotlin.designsystem.LocalAccentPalette
 import dev.hermeskotlin.designsystem.LocalDesktopLayout
+import dev.hermeskotlin.designsystem.Ayu
 import dev.hermeskotlin.designsystem.PureBlack
 import dev.hermeskotlin.designsystem.hermesTheme
 import dev.hermeskotlin.designsystem.components.LocalCodeWrap
@@ -259,9 +261,11 @@ private fun isDark(settings: AppSettings, systemDark: Boolean): Boolean = when (
 @Composable
 private fun isDark(settings: AppSettings): Boolean = isDark(settings, isSystemInDarkTheme())
 
-private fun schemeFor(settings: AppSettings, dark: Boolean): ColorScheme = when {
+/** The scheme the settings draw the app in: the light one, or the dark palette picked in Settings. */
+internal fun schemeFor(settings: AppSettings, dark: Boolean): ColorScheme = when {
     !dark -> ColorScheme.Light
-    settings.pureBlack -> PureBlack
+    settings.darkStyle == DarkStyle.Ayu -> Ayu
+    settings.darkStyle == DarkStyle.Black -> PureBlack
     else -> ColorScheme.Dark
 }
 
