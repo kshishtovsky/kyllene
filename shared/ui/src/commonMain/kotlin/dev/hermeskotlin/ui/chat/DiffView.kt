@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,8 +23,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composeunstyled.Text
@@ -58,8 +64,8 @@ import dev.hermeskotlin.designsystem.typography
  * A file tool's edit as GitHub shows a commit: each file named with how much it gained and lost, then its lines with
  * the number they have in the file, removals red and additions green, and the code colored.
  *
- * One scroll carries the whole diff sideways: a per-line scroll only answered when the finger happened to land on a
- * long line, so a diff of short lines wouldn't move at all.
+ * The numbers, the sign and the hunk header hold their place; only the code slides sideways, every line of a file on
+ * one shared scroll state and given the widest line's width, so dragging any row moves them all.
  *
  * Lines past [MAX_LINES] are cut: a gateway diff can be thousands of lines, and the phone needn't hold them all.
  */
@@ -100,7 +106,7 @@ internal fun DiffView(diff: String, title: String = "Changes", source: CommentSo
 }
 
 @Composable
-private fun DiffFileBlock(file: DiffFile, viewport: androidx.compose.ui.unit.Dp) {
+private fun DiffFileBlock(file: DiffFile, viewport: Dp) {
     val style = Theme[typography][code].copy(fontSize = 12.sp, lineHeight = 18.sp)
     val base = Theme[colors][textColor]
     val palette = if (Theme[colors][background].luminance() < 0.5f) SyntaxColors.Dark else SyntaxColors.Light
@@ -110,10 +116,19 @@ private fun DiffFileBlock(file: DiffFile, viewport: androidx.compose.ui.unit.Dp)
     val gutter = (widest * 7 + 10).dp
     // A file that only gains lines has one number per line; a removal-only one shows the number it had.
     val twoSides = file.removed > 0
-    // The file's name and counts hold their place; the lines beneath it move sideways on their own.
+    // The numbers, the sign and the hunk header hold their place; only the code moves sideways, all of it together.
     val sideways = rememberScrollState()
+    // Every line is given the widest line's room, so a short line still scrolls with the rest of the file.
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val codeWidth = remember(file, style, gutter, viewport) {
+        val widestCode = file.lines.take(MAX_LINES).maxOfOrNull {
+            measurer.measure(AnnotatedString(it.text), style, softWrap = false).size.width
+        } ?: 0
+        maxOf(viewport - gutter, with(density) { widestCode.toDp() } + 16.dp)
+    }
     var shown = 0
-    Column(Modifier.defaultMinSize(minWidth = viewport)) {
+    Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier
                 .defaultMinSize(minWidth = viewport)
@@ -133,27 +148,28 @@ private fun DiffFileBlock(file: DiffFile, viewport: androidx.compose.ui.unit.Dp)
             if (file.added > 0) Text("+${file.added}", style = Theme[typography][caption], color = Theme[colors][success])
             if (file.removed > 0) Text("−${file.removed}", style = Theme[typography][caption], color = Theme[colors][danger])
         }
-        Column(Modifier.horizontalScroll(sideways)) {
-            file.lines.forEach { line ->
-                if (shown >= MAX_LINES) return@forEach
-                shown++
-                when (line.kind) {
-                    DiffLineKind.Hunk -> Row(
-                        Modifier
-                            .defaultMinSize(minWidth = viewport)
-                            .background(Theme[colors][surface])
-                            .padding(horizontal = 10.dp, vertical = 3.dp),
-                    ) {
-                        // The whole header, however long: its tail names the function the hunk is in.
-                        BasicText(line.text, style = style.copy(color = Theme[colors][textTertiary]), softWrap = false)
-                    }
-                    DiffLineKind.Note -> Row(
-                        Modifier.defaultMinSize(minWidth = viewport).padding(horizontal = 10.dp, vertical = 2.dp),
-                    ) {
-                        Text(line.text, style = style.copy(color = Theme[colors][textTertiary]))
-                    }
-                    else -> DiffRow(line, style, base, palette, language, gutter, viewport, twoSides)
+        file.lines.forEach { line ->
+            if (shown >= MAX_LINES) return@forEach
+            shown++
+            when (line.kind) {
+                // The hunk header stays put and reads on one line; the numbers it carries are the point of it.
+                DiffLineKind.Hunk -> Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Theme[colors][surface])
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
+                ) {
+                    BasicText(
+                        line.text,
+                        style = style.copy(color = Theme[colors][textTertiary]),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
+                DiffLineKind.Note -> Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp)) {
+                    Text(line.text, style = style.copy(color = Theme[colors][textTertiary]))
+                }
+                else -> DiffRow(line, style, base, palette, language, gutter, codeWidth, sideways, twoSides)
             }
         }
     }
@@ -163,12 +179,13 @@ private fun DiffFileBlock(file: DiffFile, viewport: androidx.compose.ui.unit.Dp)
 @Composable
 private fun DiffRow(
     line: DiffLine,
-    style: androidx.compose.ui.text.TextStyle,
+    style: TextStyle,
     base: Color,
     palette: SyntaxColors,
     language: String?,
-    gutter: androidx.compose.ui.unit.Dp,
-    viewport: androidx.compose.ui.unit.Dp,
+    gutter: Dp,
+    codeWidth: Dp,
+    sideways: androidx.compose.foundation.ScrollState,
     twoSides: Boolean,
 ) {
     val added = line.kind == DiffLineKind.Added
@@ -184,7 +201,8 @@ private fun DiffRow(
         else -> Theme[colors][textTertiary]
     }
     val text = remember(line.text, language, palette) { highlightedLine(line.text, language, palette) }
-    Row(Modifier.defaultMinSize(minWidth = viewport).background(tint)) {
+    // The tint stays on the row, which never moves; only the code inside it slides under it.
+    Row(Modifier.fillMaxWidth().background(tint)) {
         // One gutter unless the file also loses lines: an insertion-only edit would print every number twice.
         if (twoSides) Text(
             line.oldNumber?.toString().orEmpty(),
@@ -199,7 +217,14 @@ private fun DiffRow(
             modifier = Modifier.widthIn(min = gutter).padding(end = 6.dp),
         )
         Text(if (added) "+" else if (removed) "-" else " ", style = style.copy(color = numberColor))
-        BasicText(text, style = style.copy(color = base), softWrap = false, modifier = Modifier.padding(start = 6.dp, end = 10.dp))
+        Box(Modifier.weight(1f).horizontalScroll(sideways)) {
+            BasicText(
+                text,
+                style = style.copy(color = base),
+                softWrap = false,
+                modifier = Modifier.defaultMinSize(minWidth = codeWidth).padding(start = 6.dp, end = 10.dp),
+            )
+        }
     }
 }
 
