@@ -2680,6 +2680,10 @@ private fun AssistantReply(
                 if (settings.showToolActivity && group.isNotEmpty()) {
                     if (message.streaming) LiveSteps(group, message.key) else Tools(group, message.key)
                 }
+                // An edit's diff is the reply's content, not tool chrome: always shown, never folded into a pill.
+                group.forEach { call ->
+                    call.diff?.let { diff -> key(call.id) { DiffView(diff, title = "${call.name} · changes", source = source) } }
+                }
                 continue
             }
             // What's happening now is said once, above the composer; the reply keeps only what it's made of.

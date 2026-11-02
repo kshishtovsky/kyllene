@@ -4,9 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -54,8 +55,11 @@ import dev.hermeskotlin.designsystem.textTertiary
 import dev.hermeskotlin.designsystem.typography
 
 /**
- * A file tool's edit as GitHub shows a commit: each file named with how much it gained and lost, then its lines in
- * two gutters — the old number and the new one — with removals red and additions green, and the code colored.
+ * A file tool's edit as GitHub shows a commit: each file named with how much it gained and lost, then its lines with
+ * the number they have in the file, removals red and additions green, and the code colored.
+ *
+ * One scroll carries the whole diff sideways: a per-line scroll only answered when the finger happened to land on a
+ * long line, so a diff of short lines wouldn't move at all.
  *
  * Lines past [MAX_LINES] are cut: a gateway diff can be thousands of lines, and the phone needn't hold them all.
  */
@@ -68,33 +72,35 @@ internal fun DiffView(diff: String, title: String = "Changes", source: CommentSo
             Text(title, style = Theme[typography][caption], color = Theme[colors][textSecondary], modifier = Modifier.weight(1f))
             CopyButton(diff)
         }
-        // One scroll for every line's text, so the gutters stay put while the code moves sideways.
-        val sideways = rememberScrollState()
         CommentableSelection(source) {
-            Column(
+            BoxWithConstraints(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(max = 380.dp)
                     .border(1.dp, Theme[colors][stroke], shape)
-                    .background(Theme[colors][background], shape)
-                    .verticalScrollWithBar(),
+                    .background(Theme[colors][background], shape),
             ) {
-                if (files.isEmpty()) {
-                    // Not a diff at all: show what the tool said rather than nothing.
-                    Text(
-                        diff.trimEnd(),
-                        style = Theme[typography][code].copy(color = Theme[colors][textColor]),
-                        modifier = Modifier.padding(10.dp),
-                    )
+                // A row's tint reaches across the box even when its code is shorter.
+                val viewport = maxWidth
+                Column(Modifier.verticalScrollWithBar()) {
+                    if (files.isEmpty()) {
+                        // Not a diff at all: show what the tool said rather than nothing.
+                        Text(
+                            diff.trimEnd(),
+                            style = Theme[typography][code].copy(color = Theme[colors][textColor]),
+                            modifier = Modifier.defaultMinSize(minWidth = viewport).padding(10.dp),
+                        )
+                    }
+                    // Each file's name stays put; only its lines move sideways, so the header can't slide away.
+                    files.forEach { file -> key(file.path) { DiffFileBlock(file, viewport) } }
                 }
-                files.forEach { file -> key(file.path) { DiffFileBlock(file, sideways) } }
             }
         }
     }
 }
 
 @Composable
-private fun DiffFileBlock(file: DiffFile, sideways: androidx.compose.foundation.ScrollState) {
+private fun DiffFileBlock(file: DiffFile, viewport: androidx.compose.ui.unit.Dp) {
     val style = Theme[typography][code].copy(fontSize = 12.sp, lineHeight = 18.sp)
     val base = Theme[colors][textColor]
     val palette = if (Theme[colors][background].luminance() < 0.5f) SyntaxColors.Dark else SyntaxColors.Light
@@ -104,45 +110,50 @@ private fun DiffFileBlock(file: DiffFile, sideways: androidx.compose.foundation.
     val gutter = (widest * 7 + 10).dp
     // A file that only gains lines has one number per line; a removal-only one shows the number it had.
     val twoSides = file.removed > 0
+    // The file's name and counts hold their place; the lines beneath it move sideways on their own.
+    val sideways = rememberScrollState()
     var shown = 0
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.defaultMinSize(minWidth = viewport)) {
         Row(
             Modifier
-                .fillMaxWidth()
+                .defaultMinSize(minWidth = viewport)
                 .background(Theme[colors][surface])
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // The path on one line: a long one is cut at the front, where it says the least (the file name stays).
+            // The path on one line, cut where it says least and leaving room for the counts beside it.
             BasicText(
                 file.path.ifEmpty { "changes" },
                 style = Theme[typography][code].copy(fontSize = 11.5.sp, color = Theme[colors][textSecondary]),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.widthIn(max = viewport - 64.dp),
             )
             if (file.added > 0) Text("+${file.added}", style = Theme[typography][caption], color = Theme[colors][success])
             if (file.removed > 0) Text("−${file.removed}", style = Theme[typography][caption], color = Theme[colors][danger])
         }
-        file.lines.forEach { line ->
-            if (shown >= MAX_LINES) return@forEach
-            shown++
-            when (line.kind) {
-                DiffLineKind.Hunk -> Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(Theme[colors][surface])
-                        .horizontalScroll(sideways)
-                        .padding(horizontal = 10.dp, vertical = 3.dp),
-                ) {
-                    // The whole header, however long: its tail names the function the hunk is in.
-                    BasicText(line.text, style = style.copy(color = Theme[colors][textTertiary]), softWrap = false)
+        Column(Modifier.horizontalScroll(sideways)) {
+            file.lines.forEach { line ->
+                if (shown >= MAX_LINES) return@forEach
+                shown++
+                when (line.kind) {
+                    DiffLineKind.Hunk -> Row(
+                        Modifier
+                            .defaultMinSize(minWidth = viewport)
+                            .background(Theme[colors][surface])
+                            .padding(horizontal = 10.dp, vertical = 3.dp),
+                    ) {
+                        // The whole header, however long: its tail names the function the hunk is in.
+                        BasicText(line.text, style = style.copy(color = Theme[colors][textTertiary]), softWrap = false)
+                    }
+                    DiffLineKind.Note -> Row(
+                        Modifier.defaultMinSize(minWidth = viewport).padding(horizontal = 10.dp, vertical = 2.dp),
+                    ) {
+                        Text(line.text, style = style.copy(color = Theme[colors][textTertiary]))
+                    }
+                    else -> DiffRow(line, style, base, palette, language, gutter, viewport, twoSides)
                 }
-                DiffLineKind.Note -> Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp)) {
-                    Text(line.text, style = style.copy(color = Theme[colors][textTertiary]))
-                }
-                else -> DiffRow(line, style, base, palette, language, gutter, sideways, twoSides)
             }
         }
     }
@@ -157,7 +168,7 @@ private fun DiffRow(
     palette: SyntaxColors,
     language: String?,
     gutter: androidx.compose.ui.unit.Dp,
-    sideways: androidx.compose.foundation.ScrollState,
+    viewport: androidx.compose.ui.unit.Dp,
     twoSides: Boolean,
 ) {
     val added = line.kind == DiffLineKind.Added
@@ -173,7 +184,7 @@ private fun DiffRow(
         else -> Theme[colors][textTertiary]
     }
     val text = remember(line.text, language, palette) { highlightedLine(line.text, language, palette) }
-    Row(Modifier.fillMaxWidth().background(tint)) {
+    Row(Modifier.defaultMinSize(minWidth = viewport).background(tint)) {
         // One gutter unless the file also loses lines: an insertion-only edit would print every number twice.
         if (twoSides) Text(
             line.oldNumber?.toString().orEmpty(),
@@ -188,9 +199,7 @@ private fun DiffRow(
             modifier = Modifier.widthIn(min = gutter).padding(end = 6.dp),
         )
         Text(if (added) "+" else if (removed) "-" else " ", style = style.copy(color = numberColor))
-        Box(Modifier.weight(1f).horizontalScroll(sideways)) {
-            BasicText(text, style = style.copy(color = base), softWrap = false, modifier = Modifier.padding(start = 6.dp, end = 10.dp))
-        }
+        BasicText(text, style = style.copy(color = base), softWrap = false, modifier = Modifier.padding(start = 6.dp, end = 10.dp))
     }
 }
 
