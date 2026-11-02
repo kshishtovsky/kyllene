@@ -108,6 +108,9 @@ interface VoiceRecorder {
     /** Ends the recording in progress now and keeps what was said. */
     fun finish()
 
+    /** Whether this device has a microphone to record from; a computer without one hides dictation. */
+    fun available(): Boolean = true
+
     /**
      * Listens while the agent works and speaks, for someone talking over it ([bargeIn] decides), with the echo
      * cancelling a call uses. [playing] says whether the voice is sounding right now; [onTrip] fires the moment

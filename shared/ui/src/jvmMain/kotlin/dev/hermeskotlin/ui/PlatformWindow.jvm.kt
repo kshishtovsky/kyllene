@@ -1,5 +1,7 @@
 package dev.hermeskotlin.ui
 
+import dev.hermeskotlin.core.voice.DesktopVoiceRecorder
+
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.window.DialogProperties
 
@@ -10,5 +12,7 @@ internal actual val imeVisible: Boolean
 internal actual fun fullScreenDialogProperties() = DialogProperties(usePlatformDefaultWidth = false)
 
 internal actual val enterSends: Boolean = true
+
+internal actual val canDictate: Boolean by lazy { DesktopVoiceRecorder().available() }
 
 internal actual val macKeys: Boolean = System.getProperty("os.name").orEmpty().startsWith("Mac")

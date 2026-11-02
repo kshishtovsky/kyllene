@@ -17,6 +17,7 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import dev.hermeskotlin.ui.clearOfWindowControls
+import dev.hermeskotlin.ui.canDictate
 import dev.hermeskotlin.ui.hasVoice
 import dev.hermeskotlin.ui.windowControlsHeight
 import dev.hermeskotlin.ui.isDesktop
@@ -512,7 +513,7 @@ fun ChatScreen(
                 // `/voice` and the like on the desktop, which has no voice yet: say so, as a silent no-op reads as broken.
                 ChatRequest.StartVoice -> if (hasVoice) startVoiceChat(false) else notice = "Voice chat isn't on the desktop yet."
                 ChatRequest.StartCall -> if (hasVoice) startVoiceChat(true) else notice = "Voice chat isn't on the desktop yet."
-                ChatRequest.StartDictation -> if (hasVoice) toggleDictation() else notice = "Dictation isn't on the desktop yet."
+                ChatRequest.StartDictation -> if (canDictate) toggleDictation() else notice = "This computer has no microphone to dictate with."
                 ChatRequest.FocusComposer -> focusComposer++
             }
         }
@@ -3909,7 +3910,7 @@ private fun FoldedComposer(
 
 /** The mic shows with the Dictation setting on, and while a dictation still runs, so it can be finished. */
 @Composable
-private fun showMic(dictation: DictationState): Boolean = hasVoice && LocalAppSettings.current.dictation || dictation.active
+private fun showMic(dictation: DictationState): Boolean = canDictate && LocalAppSettings.current.dictation || dictation.active
 
 /** Says that a command typed while a task runs goes at once, not into the task. */
 @Composable

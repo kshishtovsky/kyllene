@@ -82,8 +82,11 @@ private fun Modifier.smoothEdge(color: Color, shape: Shape): Modifier = drawWith
 
 private const val EDGE_WEIGHT = 1.35f
 
-/** A microphone and a speaker for voice: the desktop has neither yet, so dictation, voice chat and reading aloud stay off there. */
+/** A speaker and the phone's voice chat: the desktop has neither yet, so voice chat and reading aloud stay off there. */
 internal val hasVoice: Boolean get() = !isDesktop
+
+/** Whether there's a microphone to dictate with: the phone's, or the computer's capture line. */
+internal expect val canDictate: Boolean
 
 /** Room under a page's list: a phone's keeps its last row clear of the thumb's reach; a desktop's needs only a margin. */
 internal val PageFoot: Dp get() = if (isDesktop) 24.dp else 96.dp

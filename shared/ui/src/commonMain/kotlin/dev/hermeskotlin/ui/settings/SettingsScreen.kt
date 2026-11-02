@@ -191,6 +191,7 @@ import dev.hermeskotlin.ui.bots.BotFaces
 import dev.hermeskotlin.ui.bots.BotAvatar
 import dev.hermeskotlin.ui.LocalAppVersion
 import dev.hermeskotlin.ui.PlatformBackHandler
+import dev.hermeskotlin.ui.canDictate
 import dev.hermeskotlin.ui.hasVoice
 import dev.hermeskotlin.ui.windowControlsHeight
 import dev.hermeskotlin.ui.CopyableOnDesktop
@@ -619,9 +620,12 @@ internal fun SettingsView(
                     }
                 }
 
-                if (hasVoice) Section("Voice") {
-                    CallTargetRow(settings.callTargets[gatewayUrl] ?: CallTarget(), botFaces, onChooseCallTarget)
-                    Divider()
+                // A computer can dictate into the composer; a voice chat and its call target are the phone's.
+                if (canDictate) Section("Voice") {
+                    if (hasVoice) {
+                        CallTargetRow(settings.callTargets[gatewayUrl] ?: CallTarget(), botFaces, onChooseCallTarget)
+                        Divider()
+                    }
                     SwitchRow(
                         title = "Dictation",
                         detail = "A mic in the composer to talk instead of type. Off, the model name gets its room.",
@@ -629,7 +633,7 @@ internal fun SettingsView(
                         onCheckedChange = { on -> onUpdate { it.copy(dictation = on) } },
                     )
                     Divider()
-                    if (settings.dictation) {
+                    if (settings.dictation && hasVoice) {
                         Field(
                             "Dictate with",
                             detail = when (settings.dictationEngine) {
@@ -646,7 +650,7 @@ internal fun SettingsView(
                         }
                         Divider()
                     }
-                    Field("Pause before sending", detail = "How long a voice chat waits after you stop talking. Short is Hermes Desktop's timing.") {
+                    if (hasVoice) Field("Pause before sending", detail = "How long a voice chat waits after you stop talking. Short is Hermes Desktop's timing.") {
                         SegmentedControl(
                             options = VoicePause.entries,
                             selected = settings.voicePause,

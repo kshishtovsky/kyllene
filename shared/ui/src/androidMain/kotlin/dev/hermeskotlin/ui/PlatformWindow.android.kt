@@ -15,6 +15,8 @@ internal actual fun fullScreenDialogProperties() = DialogProperties(usePlatformD
 // A phone's Enter starts a new line; Send is the button.
 internal actual val enterSends: Boolean = false
 
+internal actual val canDictate: Boolean = true
+
 internal actual val macKeys: Boolean = false
 
 @Composable

@@ -16,7 +16,7 @@ import dev.hermeskotlin.core.voice.DeviceDictation
 import dev.hermeskotlin.core.voice.LiveCalls
 import dev.hermeskotlin.core.voice.NoDeviceDictation
 import dev.hermeskotlin.core.voice.NoSpeechPlayer
-import dev.hermeskotlin.core.voice.NoVoiceRecorder
+import dev.hermeskotlin.core.voice.DesktopVoiceRecorder
 import dev.hermeskotlin.core.voice.SpeechPlayer
 import dev.hermeskotlin.core.voice.VoiceRecorder
 import org.koin.core.module.Module
@@ -29,8 +29,9 @@ actual val platformModule: Module = module {
     // No app link to send the browser back to: its tab says it's done.
     single<LoopbackReceiver> { LoopbackHttpReceiver(returnUri = null) }
     single { WallpaperStore(FileBlobFile(File(appDataDir, "wallpaper.jpg")), get()) }
-    // No voice on the desktop yet; a voice chat has no live mode to fall back from.
-    single<VoiceRecorder> { NoVoiceRecorder }
+    // The computer's microphone records for dictation; there's no speech recognizer to dictate with locally, and
+    // no live voice chat to fall back from.
+    single<VoiceRecorder> { DesktopVoiceRecorder() }
     single<SpeechPlayer> { NoSpeechPlayer }
     single<DeviceDictation> { NoDeviceDictation }
     single { LiveCalls { null } }
