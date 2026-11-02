@@ -722,6 +722,7 @@ private fun SampleChat(
 ) {
     ChatView(
         title = state.title ?: "New chat",
+        chatKey = "preview",
         state = state,
         picker = ModelPickerState(),
         connected = !offline,

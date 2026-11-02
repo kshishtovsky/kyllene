@@ -556,6 +556,8 @@ fun ChatScreen(
     ChatView(
         // A bot's chat is titled "Bot Chat" on the gateway; the bot's name says more.
         title = target.bot?.label ?: state.title?.takeIf { it.isNotBlank() } ?: target.title ?: "New chat",
+        // A new chat is its nonce until the gateway names the session.
+        chatKey = target.storedSessionId ?: target.nonce,
         titleFace = LocalBotFaces.current.let { faces ->
             faces.find(target.bot?.name)?.let { bot -> { BotAvatar(bot, faces.picture(bot), size = 22.dp) } }
         },
@@ -715,6 +717,8 @@ fun ChatScreen(
 @Composable
 internal fun ChatView(
     title: String,
+    /** The chat being shown, so its list opens at its own end rather than where another was left. */
+    chatKey: Any,
     /** Drawn beside the title, e.g. the face of the bot whose chat this is. */
     titleFace: (@Composable () -> Unit)? = null,
     state: ChatState,
@@ -1044,6 +1048,7 @@ internal fun ChatView(
                         ) {
                             Messages(
                                 state.messages,
+                                chatKey = chatKey,
                                 olderMessages = state.olderMessages,
                                 loadingOlder = state.loadingOlder,
                                 bottomInset = listInset,
@@ -1755,6 +1760,8 @@ private val FOLLOW_UP_PROMPTS = listOf(
 @Composable
 private fun Messages(
     messages: List<ChatMessage>,
+    /** The chat the list shows: another one opens at its own end, not where this one was left. */
+    chatKey: Any,
     /** The conversation goes back further than [messages]; nearing the top loads the page before. */
     olderMessages: Boolean,
     loadingOlder: Boolean,
@@ -1794,12 +1801,13 @@ private fun Messages(
     }
     // Laid out top-down and opened at the end. A list holds its place by the top of what's on screen, so a reply
     // growing below the lines being read leaves them where they are; following the bottom is done here instead.
-    val listState = rememberLazyListState(messages.lastIndex.coerceAtLeast(0), LIST_END)
+    val listState = key(chatKey) { rememberLazyListState(messages.lastIndex.coerceAtLeast(0), LIST_END) }
     val scope = rememberCoroutineScope()
     val newest = messages.lastOrNull()
     val awayFromBottom by remember { derivedStateOf { listState.layoutInfo.hiddenBelow() > 600 } }
-    // Following while the reader sits right at the end; where they drag to decides whether it carries on.
-    var pinned by remember { mutableStateOf(true) }
+    // Following while the reader sits right at the end; where they drag to decides whether it carries on. Both it and
+    // the scroll above belong to the chat: another one mustn't open where this one was left, or unpinned.
+    var pinned by remember(chatKey) { mutableStateOf(true) }
     LaunchedEffect(listState) {
         snapshotFlow { listState.layoutInfo }.collect { info ->
             when (followStep(pinned, info.hiddenBelow(), listState.isScrollInProgress)) {
