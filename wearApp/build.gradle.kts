@@ -34,7 +34,10 @@ android {
         Properties().apply { file.inputStream().use(::load) }
     }
     // As androidApp: a published watch APK signed with the debug key wouldn't pair with the phone, so a release fails.
-    if (keystore == null && releasesRepo.isNotEmpty()) error("releasesRepo is set but keystore.properties is missing")
+    // Only a build that signs the watch APK needs the key: the desktop installers run from the same configuration
+    // and would fail on a machine that never signs anything.
+    val signsWatch = gradle.startParameter.taskNames.any { it.removePrefix(":").startsWith("wearApp:") && it.contains("Release") }
+    if (keystore == null && releasesRepo.isNotEmpty() && signsWatch) error("releasesRepo is set but keystore.properties is missing")
     signingConfigs {
         if (keystore != null) create("release") {
             storeFile = rootProject.file("androidApp").resolve(keystore.getProperty("storeFile"))
