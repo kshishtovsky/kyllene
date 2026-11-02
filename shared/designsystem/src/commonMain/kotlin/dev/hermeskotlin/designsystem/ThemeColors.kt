@@ -121,6 +121,99 @@ internal fun ayuColors() = darkColors(
     warningSoft to Color(0xFFFFB454).copy(alpha = 0.13f),
 )
 
+/** Gruvbox's gold-orange on its warm grays: the palette morhetz's scheme is known for. */
+private val GruvboxAccent = AccentColors(
+    Color(0xFFFE8019), Color(0xFF282828),
+    text = Color(0xFFFF9D4D), soft = Color(0xFFFE8019).copy(alpha = 0.14f),
+)
+
+/** Gruvbox dark: bg0 through bg3 as the steps up from the ground, its fg1 text, its bright reds and greens. */
+internal fun gruvboxColors() = darkColors(
+    GruvboxAccent,
+    bg = Color(0xFF282828),
+    surfaceColor = Color(0xFF32302F),
+    surface2Color = Color(0xFF3C3836),
+    surface3Color = Color(0xFF504945),
+    wellColor = Color(0xFF1D2021),
+    sheet = Color(0xFF302E2C),
+) + mapOf(
+    thumb to Color(0xFF665C54),
+    text to Color(0xFFEBDBB2),
+    textSecondary to Color(0xFFD5C4A1),
+    textTertiary to Color(0xFFBDAE93),
+    textMuted to Color(0xFF928374),
+    inverse to Color(0xFFEBDBB2),
+    onInverse to Color(0xFF282828),
+    danger to Color(0xFFFB4934),
+    success to Color(0xFFB8BB26),
+    warning to Color(0xFFFABD2F),
+    dangerSoft to Color(0xFFFB4934).copy(alpha = 0.14f),
+    successSoft to Color(0xFFB8BB26).copy(alpha = 0.13f),
+    warningSoft to Color(0xFFFABD2F).copy(alpha = 0.13f),
+)
+
+/** Kanagawa's crystal blue on sumi ink. */
+private val KanagawaAccent = AccentColors(
+    Color(0xFF7E9CD8), Color(0xFF1F1F28),
+    text = Color(0xFF7FB4CA), soft = Color(0xFF7E9CD8).copy(alpha = 0.16f),
+)
+
+/** Kanagawa's wave: sumiInk grounds, fujiWhite text, its spring green and wave red. */
+internal fun kanagawaColors() = darkColors(
+    KanagawaAccent,
+    bg = Color(0xFF1F1F28),
+    surfaceColor = Color(0xFF2A2A37),
+    surface2Color = Color(0xFF363646),
+    surface3Color = Color(0xFF40405A),
+    wellColor = Color(0xFF16161D),
+    sheet = Color(0xFF22222B),
+) + mapOf(
+    thumb to Color(0xFF54546D),
+    text to Color(0xFFDCD7BA),
+    textSecondary to Color(0xFFC8C093),
+    textTertiary to Color(0xFFA8A49A),
+    textMuted to Color(0xFF727169),
+    inverse to Color(0xFFDCD7BA),
+    onInverse to Color(0xFF1F1F28),
+    danger to Color(0xFFE46876),
+    success to Color(0xFF98BB6C),
+    warning to Color(0xFFE6C384),
+    dangerSoft to Color(0xFFE46876).copy(alpha = 0.14f),
+    successSoft to Color(0xFF98BB6C).copy(alpha = 0.13f),
+    warningSoft to Color(0xFFE6C384).copy(alpha = 0.13f),
+)
+
+/** Vesper's warm peach, the one colour the whole scheme is remembered by. */
+private val VesperAccent = AccentColors(
+    Color(0xFFFFCFA8), Color(0xFF101010),
+    text = Color(0xFFFFCFA8), soft = Color(0xFFFFCFA8).copy(alpha = 0.13f),
+)
+
+/** Vesper: a near-black ground, white-washed text and peach, as its light-on-dark editor is. */
+internal fun vesperColors() = darkColors(
+    VesperAccent,
+    bg = Color(0xFF101010),
+    surfaceColor = Color(0xFF161616),
+    surface2Color = Color(0xFF232323),
+    surface3Color = Color(0xFF282828),
+    wellColor = Color(0xFF0A0A0A),
+    sheet = Color(0xFF1A1A1A),
+) + mapOf(
+    thumb to Color(0xFF343434),
+    text to Color(0xFFCCCCCC),
+    textSecondary to Color(0xFFA0A0A0),
+    textTertiary to Color(0xFF969696),
+    textMuted to Color(0xFF65737E),
+    inverse to Color(0xFFCCCCCC),
+    onInverse to Color(0xFF101010),
+    danger to Color(0xFFFF8080),
+    success to Color(0xFF82D9C2),
+    warning to Color(0xFFFFC799),
+    dangerSoft to Color(0xFFFF8080).copy(alpha = 0.14f),
+    successSoft to Color(0xFF82D9C2).copy(alpha = 0.13f),
+    warningSoft to Color(0xFFFFC799).copy(alpha = 0.13f),
+)
+
 /** Dark and pure black share every role but the grounds they sit on. */
 internal fun darkColors(
     accentColors: AccentColors,

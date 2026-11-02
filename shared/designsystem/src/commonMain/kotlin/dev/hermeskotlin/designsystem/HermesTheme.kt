@@ -1,7 +1,9 @@
 package dev.hermeskotlin.designsystem
 
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.Composable
 import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
@@ -9,6 +11,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.composeunstyled.theme.ColorScheme
+import com.composeunstyled.theme.ColorSchemedThemeBuilder
+import com.composeunstyled.theme.ThemeToken
 import com.composeunstyled.theme.buildThemeV2
 
 // Body text sits a hair tighter than the default, as the design's -0.005em does.
@@ -21,6 +25,15 @@ val PureBlack = ColorScheme("pure_black")
 
 /** Ayu dark: Ayu's navy-black ground and gold, for the people who run Ayu everywhere else. */
 val Ayu = ColorScheme("ayu")
+
+/** Gruvbox dark: its warm grays and bright gold-orange. */
+val Gruvbox = ColorScheme("gruvbox")
+
+/** Kanagawa dark: sumi-ink grounds, fujiWhite text and crystal blue. */
+val Kanagawa = ColorScheme("kanagawa")
+
+/** Vesper: near-black, white-washed text and peach. */
+val Vesper = ColorScheme("vesper")
 
 /**
  * The app theme in Herald blue. Light/dark follow the system unless a [ColorScheme] is passed:
@@ -84,13 +97,21 @@ private fun buildHermesTheme(palette: AccentPalette) = buildThemeV2 {
     }
 
     // Ayu brings its own accent, so every accent palette draws it the same.
-    colorScheme(Ayu) {
-        val ayu = ayuColors()
-        properties[colors] = ayu
-        defaultContentColor = ayu.getValue(text)
-        defaultIndication = rememberHoverIndication(ayu.getValue(text), ayu.getValue(accent))
-        defaultTextSelectionColors = TextSelectionColors(ayu.getValue(text), ayu.getValue(text).copy(alpha = 0.35f))
-    }
+    colorScheme(Ayu) { ownColors(ayuColors()) }
+
+    // The editor schemes, alike in that they bring their own accent and ignore the one in Settings.
+    colorScheme(Gruvbox) { ownColors(gruvboxColors()) }
+    colorScheme(Kanagawa) { ownColors(kanagawaColors()) }
+    colorScheme(Vesper) { ownColors(vesperColors()) }
 
     defaultTextStyle = baseText.copy(fontSize = 15.sp, lineHeight = 22.5.sp)
+}
+
+/** A scheme that brings its own colours: its text, its accent, and selection tinted from them. */
+@Composable
+private fun ColorSchemedThemeBuilder.ownColors(palette: Map<ThemeToken<Color>, Color>) {
+    properties[colors] = palette
+    defaultContentColor = palette.getValue(text)
+    defaultIndication = rememberHoverIndication(palette.getValue(text), palette.getValue(accent))
+    defaultTextSelectionColors = TextSelectionColors(palette.getValue(text), palette.getValue(text).copy(alpha = 0.35f))
 }

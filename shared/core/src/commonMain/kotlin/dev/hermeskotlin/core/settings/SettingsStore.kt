@@ -15,10 +15,11 @@ import kotlinx.serialization.Serializable
 enum class ThemeMode { System, Light, Dark }
 
 /**
- * The palette dark mode is drawn in: [Graphite] the app's own, [Black] true black for OLED screens, [Ayu] Ayu's
- * navy black with its gold. Light mode is always the app's light scheme.
+ * The palette dark mode is drawn in: [Graphite] the app's own, [Black] true black for OLED screens, and the editor
+ * schemes [Ayu], [Gruvbox], [Kanagawa] and [Vesper], each with its own accent. Light mode is always the app's light
+ * scheme.
  */
-enum class DarkStyle { Graphite, Black, Ayu }
+enum class DarkStyle { Graphite, Black, Ayu, Gruvbox, Kanagawa, Vesper }
 
 /** The accent [AppSettings.accent] starts with: Desktop's blue. */
 const val DEFAULT_ACCENT = "Blue"

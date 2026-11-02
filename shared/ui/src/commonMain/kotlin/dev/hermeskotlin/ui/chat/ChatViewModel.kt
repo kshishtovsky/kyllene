@@ -955,8 +955,11 @@ class ChatViewModel(
             "dark" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Graphite)
             "black", "oled", "amoled" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Black)
             "ayu" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Ayu)
+            "gruvbox" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Gruvbox)
+            "kanagawa" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Kanagawa)
+            "vesper" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Vesper)
             "system", "auto", "default" -> current.copy(theme = ThemeMode.System)
-            else -> return chat.showCommandOutput("/skin", "Themes here: light, dark, black, ayu or system.", failed = true)
+            else -> return chat.showCommandOutput("/skin", "Themes here: light, dark, black, ayu, gruvbox, kanagawa, vesper or system.", failed = true)
         }
         settings.update { next }
         val name = when (next.theme) {
@@ -965,6 +968,9 @@ class ChatViewModel(
             ThemeMode.Dark -> when (next.darkStyle) {
                 DarkStyle.Black -> "black"
                 DarkStyle.Ayu -> "ayu"
+                DarkStyle.Gruvbox -> "gruvbox"
+                DarkStyle.Kanagawa -> "kanagawa"
+                DarkStyle.Vesper -> "vesper"
                 DarkStyle.Graphite -> "dark"
             }
         }

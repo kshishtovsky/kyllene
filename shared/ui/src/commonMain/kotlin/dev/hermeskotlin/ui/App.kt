@@ -39,6 +39,9 @@ import dev.hermeskotlin.designsystem.AccentPalette
 import dev.hermeskotlin.designsystem.LocalAccentPalette
 import dev.hermeskotlin.designsystem.LocalDesktopLayout
 import dev.hermeskotlin.designsystem.Ayu
+import dev.hermeskotlin.designsystem.Gruvbox
+import dev.hermeskotlin.designsystem.Kanagawa
+import dev.hermeskotlin.designsystem.Vesper
 import dev.hermeskotlin.designsystem.PureBlack
 import dev.hermeskotlin.designsystem.hermesTheme
 import dev.hermeskotlin.designsystem.components.LocalCodeWrap
@@ -264,9 +267,17 @@ private fun isDark(settings: AppSettings): Boolean = isDark(settings, isSystemIn
 /** The scheme the settings draw the app in: the light one, or the dark palette picked in Settings. */
 internal fun schemeFor(settings: AppSettings, dark: Boolean): ColorScheme = when {
     !dark -> ColorScheme.Light
-    settings.darkStyle == DarkStyle.Ayu -> Ayu
-    settings.darkStyle == DarkStyle.Black -> PureBlack
-    else -> ColorScheme.Dark
+    else -> darkScheme(settings.darkStyle)
+}
+
+/** The dark palette [style] is drawn in. */
+internal fun darkScheme(style: DarkStyle): ColorScheme = when (style) {
+    DarkStyle.Graphite -> ColorScheme.Dark
+    DarkStyle.Black -> PureBlack
+    DarkStyle.Ayu -> Ayu
+    DarkStyle.Gruvbox -> Gruvbox
+    DarkStyle.Kanagawa -> Kanagawa
+    DarkStyle.Vesper -> Vesper
 }
 
 /**

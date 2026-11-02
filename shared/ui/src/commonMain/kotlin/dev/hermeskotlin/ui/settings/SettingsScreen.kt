@@ -150,11 +150,13 @@ import dev.hermeskotlin.core.settings.VoicePause
 import dev.hermeskotlin.core.settings.DictationEngine
 import dev.hermeskotlin.core.settings.WallpaperStrength
 import dev.hermeskotlin.designsystem.AccentPalette
+import dev.hermeskotlin.designsystem.HermesTheme
 import dev.hermeskotlin.designsystem.accent
 import dev.hermeskotlin.designsystem.accentText
 import dev.hermeskotlin.designsystem.background
 import dev.hermeskotlin.designsystem.body
 import dev.hermeskotlin.designsystem.bodySmall
+import dev.hermeskotlin.designsystem.caption
 import dev.hermeskotlin.designsystem.code
 import dev.hermeskotlin.designsystem.colors
 import dev.hermeskotlin.designsystem.components.BottomSheet
@@ -195,6 +197,7 @@ import dev.hermeskotlin.ui.canDictate
 import dev.hermeskotlin.ui.hasVoice
 import dev.hermeskotlin.ui.windowControlsHeight
 import dev.hermeskotlin.ui.CopyableOnDesktop
+import dev.hermeskotlin.ui.darkScheme
 import dev.hermeskotlin.ui.isDesktop
 import dev.hermeskotlin.ui.PageRowHeight
 import dev.hermeskotlin.ui.tapVerb
@@ -449,19 +452,8 @@ internal fun SettingsView(
                     // The launcher's icon is the phone's; the desktop keeps Herald's own.
                     if (!isDesktop) NavRow(title = "App icon", detail = appIcon.label, icon = Lucide.LayoutGrid, onClick = onOpenAppIcon)
                     if (!isDesktop) Divider()
-                    Field("Dark mode", detail = "Black is true black, easier on OLED screens; Ayu is Ayu's navy black and gold.") {
-                        SegmentedControl(
-                            options = DarkStyle.entries,
-                            selected = settings.darkStyle,
-                            onSelect = { style -> onUpdate { it.copy(darkStyle = style) } },
-                            optionLabel = {
-                                when (it) {
-                                    DarkStyle.Graphite -> "Default"
-                                    DarkStyle.Black -> "Black"
-                                    DarkStyle.Ayu -> "Ayu"
-                                }
-                            },
-                        )
+                    Field("Dark mode", detail = "Black is true black, easier on OLED screens. Ayu, Gruvbox, Kanagawa and Vesper come from their editors, with their own accents.") {
+                        ThemePicker(settings.darkStyle) { style -> onUpdate { it.copy(darkStyle = style) } }
                     }
                     Divider()
                     SwitchRow(
@@ -1183,6 +1175,57 @@ internal fun IconTile(icon: ImageVector) {
  * picked one ringed in its own colour. Each is a 48dp touch target; on a narrow phone or with a large display
  * size the row wraps.
  */
+/** Each dark palette as a swatch of itself, named under it. */
+@Composable
+internal fun ThemePicker(selected: DarkStyle, onSelect: (DarkStyle) -> Unit) {
+    FlowRow(Modifier.selectableGroup()) {
+        DarkStyle.entries.forEach { style ->
+            val isSelected = style == selected
+            Column(Modifier.padding(end = 12.dp, bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    Modifier
+                        .selectable(selected = isSelected, role = Role.RadioButton, onClick = { onSelect(style) })
+                        .semantics { contentDescription = themeLabel(style) }
+                        .padding(4.dp)
+                        .width(76.dp)
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(Theme[radii][radiusSmall]))
+                        .border(2.dp, if (isSelected) Theme[colors][accent] else Theme[colors][stroke], RoundedCornerShape(Theme[radii][radiusSmall])),
+                ) {
+                    // Drawn in the scheme it shows, so the swatch is the theme and not a copy of its colours.
+                    HermesTheme(darkScheme(style)) {
+                        val swatch = Theme[colors]
+                        Box(Modifier.fillMaxSize().background(swatch[background]), contentAlignment = Alignment.Center) {
+                            Text("Aa", color = swatch[text], style = Theme[typography][body])
+                            Box(
+                                Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .background(swatch[accent]),
+                            )
+                        }
+                    }
+                }
+                Text(
+                    themeLabel(style),
+                    style = Theme[typography][caption],
+                    color = if (isSelected) Theme[colors][text] else Theme[colors][textTertiary],
+                )
+            }
+        }
+    }
+}
+
+private fun themeLabel(style: DarkStyle): String = when (style) {
+    DarkStyle.Graphite -> "Default"
+    DarkStyle.Black -> "Black"
+    DarkStyle.Ayu -> "Ayu"
+    DarkStyle.Gruvbox -> "Gruvbox"
+    DarkStyle.Kanagawa -> "Kanagawa"
+    DarkStyle.Vesper -> "Vesper"
+}
+
 @Composable
 private fun AccentPicker(selected: AccentPalette, onSelect: (AccentPalette) -> Unit) {
     val dark = Theme[colors][background].luminance() < 0.5f
