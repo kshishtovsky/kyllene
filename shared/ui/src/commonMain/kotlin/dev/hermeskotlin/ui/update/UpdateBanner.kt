@@ -59,7 +59,8 @@ val LocalUpdateOffer = compositionLocalOf { UpdateOffer(null) {} }
  * banner then opens the download in the browser instead.
  */
 fun interface UpdateInstaller {
-    suspend fun install(update: AppUpdate): Boolean
+    /** [onProgress] is a fraction of the download; a slow line makes it the only sign of life. */
+    suspend fun install(update: AppUpdate, onProgress: (Float) -> Unit): Boolean
 }
 
 /** Null on a phone, which downloads its APK through the browser. */
@@ -96,6 +97,7 @@ fun UpdateBanner(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var installing by remember(update) { mutableStateOf(false) }
     var failed by remember(update) { mutableStateOf(false) }
+    var progress by remember(update) { mutableStateOf(0f) }
     val shape = RoundedCornerShape(Theme[radii][radiusMedium])
     val tint = Theme[colors][accent]
     Column(
@@ -122,7 +124,7 @@ fun UpdateBanner(modifier: Modifier = Modifier) {
         }
         Button(
             when {
-                installing -> "Downloading…"
+                installing -> if (progress > 0f) "Downloading… ${(progress * 100).toInt()}%" else "Downloading…"
                 failed -> "Open release page"
                 installer != null -> "Install"
                 update.downloadUrl != null -> "Download"
@@ -136,7 +138,7 @@ fun UpdateBanner(modifier: Modifier = Modifier) {
                     installing = true
                     failed = false
                     scope.launch {
-                        failed = !installer.install(update)
+                        failed = !installer.install(update) { progress = it }
                         installing = false
                     }
                 }

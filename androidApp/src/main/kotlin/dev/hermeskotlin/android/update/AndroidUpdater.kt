@@ -21,10 +21,10 @@ import java.net.URI
  */
 internal class AndroidUpdater(private val context: Context) : UpdateInstaller {
 
-    override suspend fun install(update: AppUpdate): Boolean {
+    override suspend fun install(update: AppUpdate, onProgress: (Float) -> Unit): Boolean {
         val url = update.downloadUrl ?: return false
         val file = try {
-            withContext(Dispatchers.IO) { download(url, update.version) }
+            withContext(Dispatchers.IO) { download(url, update.version, onProgress) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -38,8 +38,8 @@ internal class AndroidUpdater(private val context: Context) : UpdateInstaller {
     }
 
     /** One file per version, so a half-downloaded one is never offered as the next update. */
-    private fun download(url: String, version: String): File =
-        downloadApk(url, File(File(context.cacheDir, "updates").apply { mkdirs() }, "herald-$version.apk"))
+    private fun download(url: String, version: String, onProgress: (Float) -> Unit): File =
+        downloadApk(url, File(File(context.cacheDir, "updates").apply { mkdirs() }, "herald-$version.apk"), onProgress = onProgress)
 
     private companion object {
         const val APK_MIME = "application/vnd.android.package-archive"
@@ -56,6 +56,7 @@ internal fun downloadApk(
     target: File,
     attempts: Int = DOWNLOAD_ATTEMPTS,
     budget: Long = DOWNLOAD_BUDGET_MS,
+    onProgress: (Float) -> Unit = {},
 ): File {
     val deadline = System.currentTimeMillis() + budget
     var total = -1L
@@ -82,7 +83,17 @@ internal fun downloadApk(
             val length = connection.getHeaderField("Content-Range")?.substringAfter('/')?.trim()?.toLongOrNull()
                 ?: connection.contentLengthLong.takeIf { code == 200 && it > 0 }
             if (length != null && length > 0) total = length
-            connection.inputStream.use { input -> FileOutputStream(target, true).use { input.copyTo(it) } }
+            connection.inputStream.use { input ->
+                FileOutputStream(target, true).use { out ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        out.write(buffer, 0, read)
+                        if (total > 0) onProgress((target.length().toFloat() / total).coerceIn(0f, 1f))
+                    }
+                }
+            }
         } catch (e: Exception) {
             lastError = e
         } finally {
@@ -98,5 +109,5 @@ internal fun downloadApk(
     return target
 }
 
-internal const val DOWNLOAD_ATTEMPTS = 12
-internal const val DOWNLOAD_BUDGET_MS = 5 * 60_000L
+internal const val DOWNLOAD_ATTEMPTS = 40
+internal const val DOWNLOAD_BUDGET_MS = 8 * 60_000L

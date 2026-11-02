@@ -46,8 +46,10 @@ class DownloadApkTest {
         val (server, ranges) = server(cutAfter = 100_000)
         try {
             val target = File.createTempFile("herald", ".apk").apply { delete() }
-            downloadApk("http://127.0.0.1:${server.address.port}/apk", target, attempts = 6)
+            var last = 0f
+            downloadApk("http://127.0.0.1:${server.address.port}/apk", target, attempts = 6, onProgress = { last = it })
             assertContentEquals(payload, target.readBytes(), "the whole file, byte for byte")
+            assertTrue(last > 0.99f, "progress reached the end: $last")
             assertTrue(ranges.any { it.startsWith("bytes=") }, "a retry asked for the rest: $ranges")
             target.delete()
         } finally {
