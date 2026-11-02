@@ -380,6 +380,12 @@ private fun SignedOut(onOpenHerald: () -> Unit) {
     }
 }
 
+/** Characters of reply that make one scroll step: long enough that the animation lands before the next one starts. */
+private const val SCROLL_STEP_CHARS = 64
+
+/** How far above the end still counts as reading the end, so a reply doesn't drag the reader back down. */
+private const val SCROLL_SLACK_PX = 240f
+
 @Composable
 private fun ColumnScope.Ready(
     state: AssistantCardState,
@@ -390,11 +396,19 @@ private fun ColumnScope.Ready(
     onOpenScreenSettings: () -> Unit,
 ) {
     val chat = state.chat
-    val messages = chat.messages.filter { it is ChatMessage.User || it is ChatMessage.Assistant }
+    // Remembered on the transcript: a streaming reply recomposes this panel many times a second, and the filter
+    // would walk every message each time.
+    val messages = remember(chat.messages) { chat.messages.filter { it is ChatMessage.User || it is ChatMessage.Assistant } }
     if (messages.isNotEmpty()) {
         val scroll = rememberScrollState()
-        LaunchedEffect(messages.lastOrNull()?.let { (it as? ChatMessage.Assistant)?.text?.length ?: it.key }) {
-            scroll.animateScrollTo(scroll.maxValue)
+        // Keyed on whole stretches of the reply, not on each token: a key per token cancelled the animation before
+        // it landed, so the list only ever jumped.
+        val grown = messages.lastOrNull()?.let { (it as? ChatMessage.Assistant)?.text?.length?.div(SCROLL_STEP_CHARS) ?: it.key }
+        // Where the end was before the reply grew: the new text alone mustn't look like the reader scrolling up.
+        var bottom by remember { mutableStateOf(0) }
+        LaunchedEffect(messages.size, grown) {
+            if (scroll.value >= bottom - SCROLL_SLACK_PX) scroll.animateScrollTo(scroll.maxValue)
+            bottom = scroll.maxValue
         }
         Column(
             Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(scroll).padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 14.dp),
