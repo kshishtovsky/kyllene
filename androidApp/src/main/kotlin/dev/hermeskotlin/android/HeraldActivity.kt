@@ -38,7 +38,9 @@ import dev.hermeskotlin.core.chat.SharedContent
 import dev.hermeskotlin.core.connection.ConnectionState
 import dev.hermeskotlin.core.connection.GatewayConnection
 import dev.hermeskotlin.core.settings.SettingsStore
+import dev.hermeskotlin.android.update.AndroidUpdater
 import dev.hermeskotlin.ui.App
+import dev.hermeskotlin.ui.update.LocalUpdateInstaller
 import dev.hermeskotlin.ui.chat.readAttachments
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -112,7 +114,11 @@ class HeraldActivity : FragmentActivity() {
                     deny = { PhoneConfirmations.deny(q.key) },
                 )
             }
-            CompositionLocalProvider(LocalUriHandler provides remember { browser }) {
+            // An update installs itself: the APK is fetched and handed to the system installer.
+            CompositionLocalProvider(
+                LocalUriHandler provides remember { browser },
+                LocalUpdateInstaller provides remember { AndroidUpdater(this) },
+            ) {
                 App(
                     appVersion = BuildConfig.VERSION_NAME,
                     releasesRepo = BuildConfig.RELEASES_REPO,
