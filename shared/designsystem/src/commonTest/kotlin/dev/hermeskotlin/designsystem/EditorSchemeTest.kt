@@ -23,6 +23,7 @@ class EditorSchemeTest {
         "gruvbox" to gruvboxColors(),
         "kanagawa" to kanagawaColors(),
         "vesper" to vesperColors(),
+        "hyperliquid" to hyperliquidColors(),
     )
 
     /**

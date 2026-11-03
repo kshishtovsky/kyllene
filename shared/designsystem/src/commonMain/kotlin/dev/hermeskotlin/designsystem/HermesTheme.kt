@@ -35,6 +35,9 @@ val Kanagawa = ColorScheme("kanagawa")
 /** Vesper: near-black, white-washed text and peach. */
 val Vesper = ColorScheme("vesper")
 
+/** Hyperliquid: navy-black, mint #97FCE4 and its own red. */
+val Hyperliquid = ColorScheme("hyperliquid")
+
 /**
  * The app theme in Herald blue. Light/dark follow the system unless a [ColorScheme] is passed:
  * `HermesTheme(ColorScheme.Dark) { ... }`, or [PureBlack]. [hermesTheme] gives it in another accent.
@@ -103,6 +106,7 @@ private fun buildHermesTheme(palette: AccentPalette) = buildThemeV2 {
     colorScheme(Gruvbox) { ownColors(gruvboxColors()) }
     colorScheme(Kanagawa) { ownColors(kanagawaColors()) }
     colorScheme(Vesper) { ownColors(vesperColors()) }
+    colorScheme(Hyperliquid) { ownColors(hyperliquidColors()) }
 
     defaultTextStyle = baseText.copy(fontSize = 15.sp, lineHeight = 22.5.sp)
 }

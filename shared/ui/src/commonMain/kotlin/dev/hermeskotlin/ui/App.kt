@@ -42,6 +42,7 @@ import dev.hermeskotlin.designsystem.Ayu
 import dev.hermeskotlin.designsystem.Gruvbox
 import dev.hermeskotlin.designsystem.Kanagawa
 import dev.hermeskotlin.designsystem.Vesper
+import dev.hermeskotlin.designsystem.Hyperliquid
 import dev.hermeskotlin.designsystem.PureBlack
 import dev.hermeskotlin.designsystem.hermesTheme
 import dev.hermeskotlin.designsystem.components.LocalCodeWrap
@@ -278,6 +279,7 @@ internal fun darkScheme(style: DarkStyle): ColorScheme = when (style) {
     DarkStyle.Gruvbox -> Gruvbox
     DarkStyle.Kanagawa -> Kanagawa
     DarkStyle.Vesper -> Vesper
+    DarkStyle.Hyperliquid -> Hyperliquid
 }
 
 /**

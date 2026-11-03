@@ -452,7 +452,7 @@ internal fun SettingsView(
                     // The launcher's icon is the phone's; the desktop keeps Herald's own.
                     if (!isDesktop) NavRow(title = "App icon", detail = appIcon.label, icon = Lucide.LayoutGrid, onClick = onOpenAppIcon)
                     if (!isDesktop) Divider()
-                    Field("Dark mode", detail = "Black is true black, easier on OLED screens. Ayu, Gruvbox, Kanagawa and Vesper come from their editors, with their own accents.") {
+                    Field("Dark mode", detail = "Black is true black, easier on OLED screens. Ayu, Gruvbox, Kanagawa and Vesper come from their editors, Hyperliquid from its trading app; each brings its own accent.") {
                         ThemePicker(settings.darkStyle) { style -> onUpdate { it.copy(darkStyle = style) } }
                     }
                     Divider()
@@ -1224,6 +1224,7 @@ private fun themeLabel(style: DarkStyle): String = when (style) {
     DarkStyle.Gruvbox -> "Gruvbox"
     DarkStyle.Kanagawa -> "Kanagawa"
     DarkStyle.Vesper -> "Vesper"
+    DarkStyle.Hyperliquid -> "Hyperliquid"
 }
 
 @Composable

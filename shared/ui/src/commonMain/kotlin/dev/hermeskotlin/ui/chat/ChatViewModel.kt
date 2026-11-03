@@ -958,8 +958,9 @@ class ChatViewModel(
             "gruvbox" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Gruvbox)
             "kanagawa" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Kanagawa)
             "vesper" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Vesper)
+            "hyperliquid", "hyper" -> current.copy(theme = ThemeMode.Dark, darkStyle = DarkStyle.Hyperliquid)
             "system", "auto", "default" -> current.copy(theme = ThemeMode.System)
-            else -> return chat.showCommandOutput("/skin", "Themes here: light, dark, black, ayu, gruvbox, kanagawa, vesper or system.", failed = true)
+            else -> return chat.showCommandOutput("/skin", "Themes here: light, dark, black, ayu, gruvbox, kanagawa, vesper, hyperliquid or system.", failed = true)
         }
         settings.update { next }
         val name = when (next.theme) {
@@ -971,6 +972,7 @@ class ChatViewModel(
                 DarkStyle.Gruvbox -> "gruvbox"
                 DarkStyle.Kanagawa -> "kanagawa"
                 DarkStyle.Vesper -> "vesper"
+                DarkStyle.Hyperliquid -> "hyperliquid"
                 DarkStyle.Graphite -> "dark"
             }
         }

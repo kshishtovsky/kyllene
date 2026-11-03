@@ -36,6 +36,7 @@ class DarkSchemeTest {
             DarkStyle.Gruvbox to Color(0xFF282828),
             DarkStyle.Kanagawa to Color(0xFF1F1F28),
             DarkStyle.Vesper to Color(0xFF101010),
+            DarkStyle.Hyperliquid to Color(0xFF0F121D),
         )
         for ((style, expected) in grounds) {
             runComposeUiTest {

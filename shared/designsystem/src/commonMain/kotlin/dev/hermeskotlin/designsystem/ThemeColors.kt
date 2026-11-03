@@ -214,6 +214,40 @@ internal fun vesperColors() = darkColors(
     warningSoft to Color(0xFFFFC799).copy(alpha = 0.13f),
 )
 
+/** Hyperliquid's mint, the one colour its trading screen is known for. */
+private val HyperliquidAccent = AccentColors(
+    Color(0xFF97FCE4), Color(0xFF04060C),
+    text = Color(0xFF97FCE4), soft = Color(0xFF97FCE4).copy(alpha = 0.14f),
+)
+
+/**
+ * Hyperliquid: its own tokens taken from the trading app's CSS — a navy-black ground, its surface #0F1A1F, the
+ * #273035 inset, mint #97FCE4 as the accent and #ED7088 as the red.
+ */
+internal fun hyperliquidColors() = darkColors(
+    HyperliquidAccent,
+    bg = Color(0xFF0F121D),
+    surfaceColor = Color(0xFF0F1A1F),
+    surface2Color = Color(0xFF1F2D33),
+    surface3Color = Color(0xFF273035),
+    wellColor = Color(0xFF0B0E16),
+    sheet = Color(0xFF131C22),
+) + mapOf(
+    thumb to Color(0xFF35464E),
+    text to Color(0xFFF6FEFD),
+    textSecondary to Color(0xFFC2CBCE),
+    textTertiary to Color(0xFF9AA3A4),
+    textMuted to Color(0xFF7E888A),
+    inverse to Color(0xFFF6FEFD),
+    onInverse to Color(0xFF0F121D),
+    danger to Color(0xFFED7088),
+    success to Color(0xFF50D2C1),
+    warning to Color(0xFFF3B579),
+    dangerSoft to Color(0xFFED7088).copy(alpha = 0.14f),
+    successSoft to Color(0xFF50D2C1).copy(alpha = 0.13f),
+    warningSoft to Color(0xFFF3B579).copy(alpha = 0.13f),
+)
+
 /** Dark and pure black share every role but the grounds they sit on. */
 internal fun darkColors(
     accentColors: AccentColors,
