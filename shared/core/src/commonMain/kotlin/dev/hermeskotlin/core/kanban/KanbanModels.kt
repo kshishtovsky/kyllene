@@ -361,4 +361,6 @@ data class KanbanNewTask(
     val priority: Int = 0,
     /** Parents that must be done before this one promotes to `ready`. */
     val parents: List<String> = emptyList(),
+    /** Park the new card in `triage` instead of `todo`. */
+    val triage: Boolean = false,
 )

@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
 
 /** The board as the app shows it. [board] is empty until the first read, or when that read failed ([error]). */
@@ -34,6 +36,10 @@ data class KanbanState(
 /**
  * The board of one (gateway, profile), shared by the screen and the event socket: [refresh] reads it whole,
  * [applyEvent] patches one card from a socket event so a status change doesn't cost a 100 KB refetch.
+ *
+ * Every write goes through here too: the board is patched first, so a card moves lanes the moment a finger
+ * lifts; the server's reply replaces that guess; a refusal puts the old card back and hands the server's own
+ * message to the caller. A second tap while the first call is still open sends nothing.
  */
 class KanbanRepository(private val api: KanbanApi) {
 
@@ -117,9 +123,7 @@ class KanbanRepository(private val api: KanbanApi) {
      * state are patched; comment text, bodies and attachments still need the detail fetch.
      */
     private fun KanbanBoard.patched(event: KanbanEvent): KanbanBoard? {
-        val columns = columns
-        val task = columns.asSequence().flatMap { it.tasks.asSequence() }.firstOrNull { it.id == event.taskId }
-            ?: return null
+        val task = card(event.taskId) ?: return null
         val payload = event.payload as? JsonObject
         val next = when (event.kind) {
             "status" -> task.copy(status = payload.string("status") ?: payload.string("requested_status") ?: task.status)
@@ -131,17 +135,249 @@ class KanbanRepository(private val api: KanbanApi) {
             "archived", "deleted" -> null
             else -> task
         }
-        val moved = columns.map { column ->
-            // Dropping the card from every lane is also the dedupe: it lands in exactly one.
-            val rest = column.tasks.filterNot { it.id == event.taskId }
-            if (next != null && column.name == next.status) column.copy(tasks = rest + next) else column.copy(tasks = rest)
-        }
         // shortcut: the moved card lands at the end of its lane, not in the server's dispatch order — the
         // next full refresh restores it; sort here once a lane's order starts to matter to the UI.
-        return copy(columns = moved, latestEventId = maxOf(latestEventId, event.id))
+        return withTask(event.taskId, next).copy(latestEventId = maxOf(latestEventId, event.id))
     }
+
+    // --- Writes -------------------------------------------------------------------------------------
+    // Each answers the text to show the user, or null when the write went through (create answers the card).
+
+    /**
+     * `POST /tasks`, then `PATCH {status}` when [column] names a lane other than the one the server picked:
+     * `triage` is a create flag, every other column is a follow-up patch.
+     */
+    suspend fun create(draft: KanbanNewTask, column: String? = null): ApiResult<KanbanTask> =
+        once<ApiResult<KanbanTask>>(CREATE, ApiResult.Failed(0, ALREADY_SENDING)) {
+            val scope = scope ?: return@once ApiResult.Unavailable(NOT_CONNECTED)
+            when (val created = api.createTask(scope.url, draft, _state.value.slug)) {
+                is ApiResult.Success -> {
+                    val moved = if (column != null && column != created.value.status) {
+                        api.updateTask(scope.url, created.value.id, KanbanTaskPatch(status = column), _state.value.slug)
+                    } else {
+                        null
+                    }
+                    when (moved) {
+                        null -> ApiResult.Success(place(created.value))
+                        is ApiResult.Success -> ApiResult.Success(place(moved.value))
+                        // The card exists, only not in the lane that was asked for: show where the server put it.
+                        else -> {
+                            refresh()
+                            moved
+                        }
+                    }
+                }
+                else -> created
+            }
+        }
+
+    /** `PATCH {status}` — the manual move from a status menu. */
+    suspend fun move(taskId: String, status: String): String? = onceText("move:$taskId") {
+        val scope = scope ?: return@onceText NOT_CONNECTED
+        val previous = _state.value.board.card(taskId)
+        previous?.let { place(it.copy(status = status)) }
+        when (val result = api.updateTask(scope.url, taskId, KanbanTaskPatch(status = status), _state.value.slug)) {
+            is ApiResult.Success -> {
+                place(result.value)
+                null
+            }
+            else -> {
+                previous?.let(::place)
+                result.errorMessage
+            }
+        }
+    }
+
+    /** `POST /tasks/{id}/reassign`; a running card answers 409 until [reclaimFirst] releases the claim. */
+    suspend fun assign(taskId: String, profile: String?, reclaimFirst: Boolean = false): String? =
+        onceText("assign:$taskId") {
+            val scope = scope ?: return@onceText NOT_CONNECTED
+            val previous = _state.value.board.card(taskId)
+            previous?.let { place(it.copy(assignee = profile)) }
+            when (val result = api.reassign(scope.url, taskId, profile, reclaimFirst, _state.value.slug)) {
+                is ApiResult.Success -> null
+                else -> {
+                    previous?.let(::place)
+                    result.errorMessage
+                }
+            }
+        }
+
+    /** `POST /tasks/{id}/reclaim` — release a dead worker's claim now; 409 means there was nothing to reclaim. */
+    suspend fun reclaim(taskId: String, reason: String? = null): String? = onceText("reclaim:$taskId") {
+        val scope = scope ?: return@onceText NOT_CONNECTED
+        when (val result = api.reclaim(scope.url, taskId, reason, _state.value.slug)) {
+            is ApiResult.Success -> {
+                refresh()
+                null
+            }
+            else -> result.errorMessage
+        }
+    }
+
+    /** `POST /dispatch` — "run it now" instead of waiting out the dispatcher's tick. */
+    suspend fun dispatch(): String? = onceText(DISPATCH) {
+        val scope = scope ?: return@onceText NOT_CONNECTED
+        when (val result = api.dispatch(scope.url, board = _state.value.slug)) {
+            is ApiResult.Success -> null
+            else -> result.errorMessage
+        }
+    }
+
+    /** `PATCH {status: done}` — a human override; the screen confirms first when the card is somebody else's. */
+    suspend fun complete(taskId: String, summary: String? = null): String? = onceText("complete:$taskId") {
+        val scope = scope ?: return@onceText NOT_CONNECTED
+        val previous = _state.value.board.card(taskId)
+        previous?.let { place(it.copy(status = "done")) }
+        when (val result = api.complete(scope.url, taskId, summary, board = _state.value.slug)) {
+            is ApiResult.Success -> {
+                place(result.value)
+                null
+            }
+            else -> {
+                previous?.let(::place)
+                result.errorMessage
+            }
+        }
+    }
+
+    /**
+     * `PATCH {status: blocked, block_reason}`.
+     *
+     * shortcut: the plugin's PATCH carries no `block_kind`, so the kind stays whatever an agent last set;
+     * offer it in the block dialog once the dashboard's UpdateTaskBody accepts the field.
+     */
+    suspend fun block(taskId: String, reason: String? = null): String? = onceText("block:$taskId") {
+        val scope = scope ?: return@onceText NOT_CONNECTED
+        val previous = _state.value.board.card(taskId)
+        previous?.let { place(it.copy(status = "blocked")) }
+        when (val result = api.block(scope.url, taskId, reason, _state.value.slug)) {
+            is ApiResult.Success -> {
+                place(result.value)
+                null
+            }
+            else -> {
+                previous?.let(::place)
+                result.errorMessage
+            }
+        }
+    }
+
+    /** `PATCH {status: ready}` — the server's own unblock path; 409 while a parent is still open. */
+    suspend fun unblock(taskId: String): String? = onceText("unblock:$taskId") {
+        val scope = scope ?: return@onceText NOT_CONNECTED
+        val previous = _state.value.board.card(taskId)
+        previous?.let { place(it.copy(status = "ready")) }
+        when (val result = api.unblock(scope.url, taskId, _state.value.slug)) {
+            is ApiResult.Success -> {
+                place(result.value)
+                null
+            }
+            else -> {
+                previous?.let(::place)
+                result.errorMessage
+            }
+        }
+    }
+
+    /** `POST /runs/{id}/terminate` — kills the worker and re-queues the card; 409 when the run already ended. */
+    suspend fun terminate(runId: Long, reason: String? = null): String? = onceText("terminate:$runId") {
+        val scope = scope ?: return@onceText NOT_CONNECTED
+        when (val result = api.terminateRun(scope.url, runId, reason, _state.value.slug)) {
+            is ApiResult.Success -> {
+                refresh()
+                null
+            }
+            else -> result.errorMessage
+        }
+    }
+
+    /** `POST /links`; a cycle, a self-link or a foreign task is refused by the server, whose text is the reply. */
+    suspend fun addLink(parentId: String, childId: String): String? = onceText("link:$parentId:$childId") {
+        val scope = scope ?: return@onceText NOT_CONNECTED
+        val parent = _state.value.board.card(parentId)
+        val child = _state.value.board.card(childId)
+        parent?.let { place(it.copy(linkCounts = it.linkCounts.copy(children = it.linkCounts.children + 1))) }
+        child?.let { place(it.copy(linkCounts = it.linkCounts.copy(parents = it.linkCounts.parents + 1))) }
+        when (val result = api.addLink(scope.url, parentId, childId, _state.value.slug)) {
+            is ApiResult.Success -> null
+            else -> {
+                parent?.let(::place)
+                child?.let(::place)
+                result.errorMessage
+            }
+        }
+    }
+
+    /**
+     * `DELETE /links` — query parameters here, unlike the POST.
+     *
+     * shortcut: an edge the server doesn't have answers `200 {ok:false}`, which reads as success; the counts
+     * then stay one too low until the next refresh — fix once [KanbanApi.removeLink] returns the flag.
+     */
+    suspend fun removeLink(parentId: String, childId: String): String? = onceText("link:$parentId:$childId") {
+        val scope = scope ?: return@onceText NOT_CONNECTED
+        val parent = _state.value.board.card(parentId)
+        val child = _state.value.board.card(childId)
+        parent?.let {
+            place(it.copy(linkCounts = it.linkCounts.copy(children = (it.linkCounts.children - 1).coerceAtLeast(0))))
+        }
+        child?.let {
+            place(it.copy(linkCounts = it.linkCounts.copy(parents = (it.linkCounts.parents - 1).coerceAtLeast(0))))
+        }
+        when (val result = api.removeLink(scope.url, parentId, childId, _state.value.slug)) {
+            is ApiResult.Success -> null
+            else -> {
+                parent?.let(::place)
+                child?.let(::place)
+                result.errorMessage
+            }
+        }
+    }
+
+    // --- Plumbing -----------------------------------------------------------------------------------
+
+    private val inflight = mutableSetOf<String>()
+    private val inflightLock = Mutex()
+
+    /** Runs [block] unless a call under the same [key] is still open, in which case [duplicate] is the answer. */
+    private suspend fun <T> once(key: String, duplicate: T, block: suspend () -> T): T {
+        val accepted = inflightLock.withLock { inflight.add(key) }
+        if (!accepted) return duplicate
+        try {
+            return block()
+        } finally {
+            inflightLock.withLock { inflight.remove(key) }
+        }
+    }
+
+    /** [once] for the writes that answer only an error text (null = done); a duplicate also answers null. */
+    private suspend fun onceText(key: String, block: suspend () -> String?): String? = once(key, null, block)
+
+    /** Shows a server-confirmed card on the board; the lane follows its status. */
+    private fun place(task: KanbanTask): KanbanTask {
+        _state.update { it.copy(board = it.board.withTask(task.id, task)) }
+        return task
+    }
+
+    private fun KanbanBoard.card(id: String): KanbanTask? =
+        columns.asSequence().flatMap { it.tasks.asSequence() }.firstOrNull { it.id == id }
+
+    /** Puts [task] in the lane its status names, or drops it from every lane when null; also the dedupe. */
+    private fun KanbanBoard.withTask(taskId: String, task: KanbanTask?): KanbanBoard =
+        copy(columns = columns.map { column ->
+            val rest = column.tasks.filterNot { it.id == taskId }
+            if (task != null && column.name == task.status) column.copy(tasks = rest + task) else column.copy(tasks = rest)
+        })
 
     /** Drops a repeated card id inside a lane: a gateway that repeats one would crash the list that keys by id. */
     private fun KanbanBoard.deduped(): KanbanBoard =
         copy(columns = columns.map { it.copy(tasks = it.tasks.distinctBy { task -> task.id }) })
+
+    private companion object {
+        const val CREATE = "create"
+        const val DISPATCH = "dispatch"
+        const val ALREADY_SENDING = "That is still being sent."
+        const val NOT_CONNECTED = "Not connected to a gateway."
+    }
 }

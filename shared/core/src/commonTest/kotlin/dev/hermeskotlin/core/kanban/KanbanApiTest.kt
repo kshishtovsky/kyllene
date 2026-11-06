@@ -80,6 +80,25 @@ class KanbanApiTest {
     }
 
     @Test
+    fun aCommentGoesThroughTheOneRouteTheSheetUses() = runTest {
+        var seen: HttpRequestData? = null
+        var body = ""
+        val api = api { request ->
+            seen = request
+            body = request.bodyText()
+            respond("""{"ok":true}""", HttpStatusCode.OK, json)
+        }
+
+        api.addComment(url, "t_1", "looks good", board = "dev")
+
+        assertEquals("/api/plugins/kanban/tasks/t_1/comments", seen?.url?.encodedPath)
+        assertEquals("board=dev", seen?.url?.encodedQuery)
+        val sent = kotlinx.serialization.json.Json.parseToJsonElement(body).jsonObject
+        assertEquals("looks good", sent["body"]?.jsonPrimitive?.content)
+        assertEquals("dashboard", sent["author"]?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun aConflictKeepsTheServerMessage() = runTest {
         val api = api { respond("""{"detail":"cannot reclaim t_1: not in a claimable state"}""", HttpStatusCode.Conflict, json) }
 
