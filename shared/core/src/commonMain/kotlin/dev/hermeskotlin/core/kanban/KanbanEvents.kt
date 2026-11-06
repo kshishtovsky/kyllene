@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlin.concurrent.Volatile
 
 /** One frame of the board's event stream: rows oldest first, [cursor] the id the next connect resumes after. */
 data class KanbanFrame(val events: List<KanbanEvent>, val cursor: Long)
@@ -81,6 +82,9 @@ class KanbanEventsSocket(
     private data class Board(val gateway: String, val slug: String)
 
     private val cursors = mutableMapOf<Board, Long>()
+
+    // Written by the socket's collector, read by the poller on another thread: the board's freshness has to be seen.
+    @Volatile
     private var lastFrameAt = 0L
 
     /** When a frame was last heard, for the poller that stands in while the socket is away. */

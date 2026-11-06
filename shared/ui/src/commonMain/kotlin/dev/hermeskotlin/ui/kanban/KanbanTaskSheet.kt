@@ -4,6 +4,7 @@ package dev.hermeskotlin.ui.kanban
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -59,6 +62,7 @@ import dev.hermeskotlin.core.kanban.KanbanAttachment
 import dev.hermeskotlin.core.kanban.KanbanComment
 import dev.hermeskotlin.core.kanban.KanbanEvent
 import dev.hermeskotlin.core.kanban.KanbanEventLine
+import dev.hermeskotlin.core.kanban.KanbanLive
 import dev.hermeskotlin.core.kanban.KanbanRun
 import dev.hermeskotlin.core.kanban.KanbanTask
 import dev.hermeskotlin.core.kanban.KanbanTaskDetail
@@ -82,6 +86,7 @@ import dev.hermeskotlin.designsystem.components.DropdownMenu
 import dev.hermeskotlin.designsystem.components.IconButton
 import dev.hermeskotlin.designsystem.components.MarkdownText
 import dev.hermeskotlin.designsystem.components.MenuAction
+import dev.hermeskotlin.designsystem.components.MinTouchTarget
 import dev.hermeskotlin.designsystem.components.SectionLabel
 import dev.hermeskotlin.designsystem.components.SheetHeader
 import dev.hermeskotlin.designsystem.components.Spinner
@@ -92,6 +97,7 @@ import dev.hermeskotlin.designsystem.label
 import dev.hermeskotlin.designsystem.onAccent
 import dev.hermeskotlin.designsystem.radii
 import dev.hermeskotlin.designsystem.radiusFull
+import dev.hermeskotlin.designsystem.rememberHoverIndication
 import dev.hermeskotlin.designsystem.success
 import dev.hermeskotlin.designsystem.surface2
 import dev.hermeskotlin.designsystem.text
@@ -114,8 +120,9 @@ import kotlin.time.ExperimentalTime
 /** A running card's comments and events change under the sheet; four seconds is the dashboard's own cadence. */
 private const val COMMENT_POLL_MS = 4_000L
 
-/** The lanes the status menu offers, in the board's order; a local copy keeps the sheet free of the board's file. */
-private val statusLanes = listOf("triage", "todo", "scheduled", "ready", "running", "blocked", "review", "done")
+/** The lanes the status menu offers, in the board's order. `running` isn't one of them: it is a worker's own lane and
+ * the gateway refuses a `PATCH {status:running}` with a 409 (see the live-stream card). */
+private val statusLanes = kanbanLanes.map { it.first }.filterNot { it == "running" }
 
 /**
  * One card's sheet: body, comments, events, runs, attachments — the dashboard drawer's sections in one scroll.
@@ -129,6 +136,8 @@ internal fun KanbanTaskSheet(
     onDismiss: () -> Unit,
     onChanged: () -> Unit = {},
     api: KanbanApi = koinInject(),
+    /** The board's socket: it names the open card, so its own events reload the sheet instead of the poll alone. */
+    live: KanbanLive? = null,
 ) {
     val scope = rememberCoroutineScope()
     val changed by rememberUpdatedState(onChanged)
@@ -137,6 +146,10 @@ internal fun KanbanTaskSheet(
     }
     LaunchedEffect(taskId) { if (taskId == null) model.close() else model.open(taskId) }
     DisposableEffect(model) { onDispose { model.close() } }
+    LaunchedEffect(taskId, live) {
+        if (taskId != null) live?.openTask(taskId) { model.reload() } else live?.closeTask()
+    }
+    DisposableEffect(live) { onDispose { live?.closeTask() } }
 
     val state by model.state.collectAsStateWithLifecycle()
     val running = taskId != null && state.detail?.task?.status == "running"
@@ -170,6 +183,10 @@ internal fun KanbanTaskSheetContent(
             return@BottomSheet
         }
         val desktop = isDesktop
+        // The feed's prose is rebuilt when the rows change, not on every recomposition of the sheet.
+        val events = remember(detail.events) {
+            detail.events.asReversed().mapNotNull { event -> kanbanEventLine(event)?.let { event to it } }
+        }
         Header(detail.task, onMove = model::move)
         state.notice?.let { Notice(it, model::dismissNotice) }
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = if (desktop) 500.dp else 540.dp)) {
@@ -189,7 +206,7 @@ internal fun KanbanTaskSheetContent(
             item(key = "events-label") {
                 SectionLabel("Activity", Modifier.padding(SECTION_PADDING))
             }
-            items(detail.events.asReversed().mapNotNull { event -> kanbanEventLine(event)?.let { event to it } }, key = { "event-${it.first.id}" }) { (event, line) ->
+            items(events, key = { "event-${it.first.id}" }) { (event, line) ->
                 EventRow(event, line)
             }
 
@@ -247,6 +264,7 @@ private fun Header(task: KanbanTask, onMove: (String) -> Unit) {
 @Composable
 private fun StatusMenu(status: String, onMove: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
+    val interaction = remember { MutableInteractionSource() }
     DropdownMenu(
         expanded = open,
         onExpandedChange = { open = it },
@@ -258,10 +276,11 @@ private fun StatusMenu(status: String, onMove: (String) -> Unit) {
     ) {
         Row(
             Modifier
+                .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
                 .clip(CircleShape)
                 .background(Theme[colors][accentSoft])
-                .clickable { open = true }
-                .padding(horizontal = 10.dp, vertical = 5.dp),
+                .clickable(interaction, indication = rememberHoverIndication(Theme[colors][accentText], CircleShape), role = Role.Button) { open = true }
+                .padding(horizontal = 14.dp, vertical = 5.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -341,10 +360,15 @@ private fun Warnings(detail: KanbanTaskDetail) {
     val warnings = detail.task.warnings ?: return
     if (warnings.count <= 0) return
     var open by remember { mutableStateOf(false) }
+    val interaction = remember { MutableInteractionSource() }
     Column(Modifier.fillMaxWidth().padding(horizontal = SECTION_PADDING, vertical = 6.dp)) {
         Surface(Modifier.fillMaxWidth(), color = Theme[colors][warningSoft]) {
             Row(
-                Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 12.dp, vertical = 8.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .sizeIn(minHeight = MinTouchTarget)
+                    .clickable(interaction, indication = rememberHoverIndication(Theme[colors][text]), role = Role.Button) { open = !open }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

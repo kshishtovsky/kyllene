@@ -1,6 +1,7 @@
 package dev.hermeskotlin.ui.kanban
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +52,7 @@ import dev.hermeskotlin.designsystem.components.TextField
 import dev.hermeskotlin.designsystem.components.handCursor
 import dev.hermeskotlin.designsystem.components.verticalScrollWithBar
 import dev.hermeskotlin.designsystem.danger
+import dev.hermeskotlin.designsystem.rememberHoverIndication
 import dev.hermeskotlin.designsystem.text
 import dev.hermeskotlin.designsystem.textTertiary
 import dev.hermeskotlin.designsystem.typography
@@ -125,12 +128,19 @@ private fun BoardRow(
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = MinTouchTarget)
             .handCursor(enabled && !current)
-            .clickable(enabled = enabled && !current, onClick = onSelect)
+            .clickable(
+                interaction,
+                indication = rememberHoverIndication(Theme[colors][text]),
+                enabled = enabled && !current,
+                role = Role.Button,
+                onClick = onSelect,
+            )
             .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),

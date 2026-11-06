@@ -9,6 +9,7 @@ import dev.hermeskotlin.core.kanban.KanbanBoard
 import dev.hermeskotlin.core.kanban.KanbanRepository
 import dev.hermeskotlin.core.kanban.KanbanState
 import dev.hermeskotlin.core.kanban.KanbanTask
+import dev.hermeskotlin.core.kanban.kanbanStatusLabel
 import dev.hermeskotlin.core.network.ApiResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,15 +18,8 @@ import kotlinx.coroutines.launch
 
 /** The lanes the screen draws, in the dashboard's order. Empty lanes stay visible: a board that hides them jumps. */
 val kanbanLanes: List<Pair<String, String>> = listOf(
-    "triage" to "Triage",
-    "todo" to "To Do",
-    "scheduled" to "Scheduled",
-    "ready" to "Ready",
-    "running" to "Running",
-    "blocked" to "Blocked",
-    "review" to "Review",
-    "done" to "Done",
-)
+    "triage", "todo", "scheduled", "ready", "running", "blocked", "review", "done",
+).map { it to kanbanStatusLabel(it) }
 
 /** A lane's cards; a lane the reply left out is empty rather than missing. */
 fun laneTasks(board: KanbanBoard, status: String): List<KanbanTask> =

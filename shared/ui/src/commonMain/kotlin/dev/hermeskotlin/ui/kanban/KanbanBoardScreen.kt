@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -59,6 +62,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquare
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.User
+import com.composables.icons.lucide.X
 import com.composeunstyled.AnchorAlignment
 import com.composeunstyled.Text
 import com.composeunstyled.UnstyledIcon
@@ -80,6 +84,7 @@ import dev.hermeskotlin.designsystem.components.ButtonVariant
 import dev.hermeskotlin.designsystem.components.DropdownMenu
 import dev.hermeskotlin.designsystem.components.IconButton
 import dev.hermeskotlin.designsystem.components.MenuChoice
+import dev.hermeskotlin.designsystem.components.MinTouchTarget
 import dev.hermeskotlin.designsystem.components.Skeleton
 import dev.hermeskotlin.designsystem.components.Spinner
 import dev.hermeskotlin.designsystem.components.Surface
@@ -89,6 +94,7 @@ import dev.hermeskotlin.designsystem.dangerSoft
 import dev.hermeskotlin.designsystem.display
 import dev.hermeskotlin.designsystem.radii
 import dev.hermeskotlin.designsystem.radiusMedium
+import dev.hermeskotlin.designsystem.rememberHoverIndication
 import dev.hermeskotlin.designsystem.stroke
 import dev.hermeskotlin.designsystem.success
 import dev.hermeskotlin.designsystem.surface2
@@ -100,6 +106,7 @@ import dev.hermeskotlin.designsystem.textTertiary
 import dev.hermeskotlin.designsystem.title
 import dev.hermeskotlin.designsystem.typography
 import dev.hermeskotlin.designsystem.warning
+import dev.hermeskotlin.designsystem.warningSoft
 import dev.hermeskotlin.ui.clearOfWindowControls
 import dev.hermeskotlin.ui.components.EmptyState
 import dev.hermeskotlin.ui.isDesktop
@@ -126,6 +133,9 @@ internal fun KanbanBoardScreen(
     onCreateTask: () -> Unit,
     onSwitchBoard: () -> Unit,
     onAssign: (taskId: String, assignee: String?) -> Unit = { _, _ -> },
+    /** Why the last write failed, shown until dismissed; a write the user made never fails silently. */
+    notice: String? = null,
+    onDismissNotice: () -> Unit = {},
     viewModel: KanbanBoardViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -141,6 +151,8 @@ internal fun KanbanBoardScreen(
         onCreateTask = onCreateTask,
         onSwitchBoard = onSwitchBoard,
         onAssign = onAssign,
+        notice = notice,
+        onDismissNotice = onDismissNotice,
     )
 }
 
@@ -156,6 +168,8 @@ internal fun KanbanBoardContent(
     onCreateTask: () -> Unit = {},
     onSwitchBoard: () -> Unit = {},
     onAssign: (taskId: String, assignee: String?) -> Unit = { _, _ -> },
+    notice: String? = null,
+    onDismissNotice: () -> Unit = {},
 ) {
     val board = state.board
     val tasks = kanbanLanes.sumOf { laneTasks(board, it.first).size }
@@ -168,6 +182,9 @@ internal fun KanbanBoardContent(
     ) {
         BoardHeader(boardName, desktop, onBack, onSwitchBoard, onCreateTask)
         state.error?.let { BoardErrorBanner(it, onRetry) }
+        notice?.let { BoardBanner(it, onDismissNotice) }
+        // The socket's own health: reconnects only count once a tail has failed, so a read that works says nothing.
+        if (!state.live && state.reconnects > 0) BoardBanner("No connection — showing the last read.")
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 // No cached board at all: the first read is in flight, so a skeleton beats an empty screen.
@@ -227,6 +244,25 @@ private fun BoardErrorBanner(message: String, onRetry: () -> Unit) {
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
             )
             Button("Try again", onRetry, variant = ButtonVariant.Outline, size = ButtonSize.Small)
+        }
+    }
+}
+
+@Composable
+private fun BoardBanner(message: String, onDismiss: (() -> Unit)? = null) {
+    Surface(
+        Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth(),
+        color = Theme[colors][warningSoft],
+    ) {
+        Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                message,
+                style = Theme[typography][bodySmall],
+                color = Theme[colors][text],
+                maxLines = 2,
+                modifier = Modifier.weight(1f).padding(vertical = 6.dp),
+            )
+            if (onDismiss != null) IconButton(Lucide.X, "Dismiss", onDismiss, iconSize = 14.dp)
         }
     }
 }
@@ -405,8 +441,17 @@ private fun KanbanCard(
     onAssign: (String?) -> Unit,
 ) {
     val running = task.status == "running"
+    val interaction = remember { MutableInteractionSource() }
     Surface(
-        Modifier.fillMaxWidth().handCursor().clickable(onClick = onClick),
+        Modifier
+            .fillMaxWidth()
+            .handCursor()
+            .clickable(
+                interaction,
+                indication = rememberHoverIndication(Theme[colors][text]),
+                role = Role.Button,
+                onClick = onClick,
+            ),
         color = Theme[colors][surface2],
     ) {
         Column(Modifier.padding(11.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -463,19 +508,24 @@ private fun KanbanCard(
             }
             if (running) {
                 val seconds = rememberRunClock(task, boardNow, visible)
-                if (seconds != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Spinner(Modifier.size(11.dp), Theme[colors][success])
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Spinner(Modifier.size(11.dp), Theme[colors][success])
+                    // The state in words, not only in the colour and the spinner: a screen reader has neither.
+                    Text("Running", style = Theme[typography][bodySmall], color = Theme[colors][success])
+                    if (seconds != null) {
                         Text(formatRunClock(seconds), style = Theme[typography][codeStyle].copy(fontSize = 11.sp), color = Theme[colors][success])
                     }
                 }
             }
-            val blocked = task.status == "blocked"
-            if (blocked && (blockKindLabel(task.blockKind) != null || task.blockRecurrences > 0)) {
+            if (task.status == "blocked") {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    blockKindLabel(task.blockKind)?.let {
-                        Text(it, style = Theme[typography][bodySmall], color = Theme[colors][danger], maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+                    Text(
+                        blockKindLabel(task.blockKind) ?: "Blocked",
+                        style = Theme[typography][bodySmall],
+                        color = Theme[colors][danger],
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     if (task.blockRecurrences > 0) {
                         Text("×${task.blockRecurrences}", style = Theme[typography][codeStyle].copy(fontSize = 11.sp), color = Theme[colors][textTertiary])
                     }
@@ -494,9 +544,20 @@ private fun Glyph(
     tint: Color = Theme[colors][textTertiary],
     onClick: (() -> Unit)? = null,
 ) {
+    val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier
-            .then(if (onClick != null) Modifier.handCursor().clickable(onClick = onClick) else Modifier)
+            .then(
+                if (onClick != null) {
+                    // A badge is small; the tap area around it isn't.
+                    Modifier
+                        .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
+                        .handCursor()
+                        .clickable(interaction, indication = rememberHoverIndication(tint), role = Role.Button, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
             .semantics(mergeDescendants = true) { contentDescription = description },
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -509,6 +570,7 @@ private fun Glyph(
 @Composable
 private fun AssigneeAvatar(assignee: String?, assignees: List<String>, onAssign: (String?) -> Unit) {
     var open by remember { mutableStateOf(false) }
+    val interaction = remember { MutableInteractionSource() }
     DropdownMenu(
         expanded = open,
         onExpandedChange = { open = it },
@@ -523,9 +585,9 @@ private fun AssigneeAvatar(assignee: String?, assignees: List<String>, onAssign:
             // The avatar is the anchor: tap it to hand the card to someone else.
             Box(
                 Modifier
-                    .size(40.dp)
+                    .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
                     .handCursor()
-                    .clickable { open = true }
+                    .clickable(interaction, indication = rememberHoverIndication(Theme[colors][text]), role = Role.Button) { open = true }
                     .semantics { contentDescription = assignee?.let { "Assignee $it" } ?: "Unassigned" },
                 contentAlignment = Alignment.Center,
             ) {

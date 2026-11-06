@@ -648,7 +648,12 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
             }
             Shortcut.Settings -> true.also { settingsOpen = true }
             Shortcut.ToggleSidebar -> true.also { scope.launch { sidebar.toggle() } }
-            Shortcut.OpenKanban -> true.also { kanban.show() }
+            Shortcut.OpenKanban -> true.also {
+                kanban.show()
+                // The board is drawn under a plugin page: a shortcut that looks dead is the page still on top.
+                pluginUrl = null
+                pluginLabel = null
+            }
             // The sidebar has opened its search already; it has to show to be used.
             Shortcut.SearchChats -> true.also { scope.launch { sidebar.open() } }
             else -> false

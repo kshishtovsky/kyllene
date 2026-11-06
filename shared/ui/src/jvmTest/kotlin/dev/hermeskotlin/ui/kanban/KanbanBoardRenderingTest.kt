@@ -101,6 +101,28 @@ class KanbanBoardRenderingTest {
     }
 
     @Test
+    fun theNewTaskButtonAndTheAssigneeMenuDoWhatTheySay() = runComposeUiTest {
+        var created = 0
+        var assigned: Pair<String, String?>? = null
+        setContent {
+            HermesTheme(ColorScheme.Dark) {
+                KanbanBoardContent(
+                    KanbanState(board = board(card.copy(status = "todo"))),
+                    "Dev",
+                    desktop = true,
+                    onCreateTask = { created += 1 },
+                    onAssign = { id, name -> assigned = id to name },
+                )
+            }
+        }
+        onNodeWithContentDescription("New task").performClick()
+        assertEquals(1, created)
+        onNodeWithContentDescription("Assignee coder").performClick()
+        onNodeWithText("reviewer").performClick()
+        assertEquals("t_f9bdee25" to "reviewer", assigned)
+    }
+
+    @Test
     fun firstLoadIsASkeleton() = runComposeUiTest {
         setContent { HermesTheme(ColorScheme.Dark) { KanbanBoardContent(KanbanState(board = KanbanBoard()), "Dev", desktop = true) } }
         onNodeWithTag("kanban-skeleton").assertExists()

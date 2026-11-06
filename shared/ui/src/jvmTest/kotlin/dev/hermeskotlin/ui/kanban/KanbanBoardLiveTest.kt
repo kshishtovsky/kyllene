@@ -66,7 +66,11 @@ class KanbanBoardLiveTest {
     private fun ComposeUiTest.laneOf(title: String): String {
         val card = onNodeWithText(title).fetchSemanticsNode().boundsInRoot.center.x
         return kanbanLanes.map { it.second }
-            .minBy { lane -> kotlin.math.abs(onNodeWithText(lane).fetchSemanticsNode().boundsInRoot.center.x - card) }
+            .minBy { lane ->
+                // A running card says "Running" too: the lane's own word is the one at the top of its column.
+                val header = onAllNodesWithText(lane).fetchSemanticsNodes().minBy { it.boundsInRoot.top }
+                kotlin.math.abs(header.boundsInRoot.center.x - card)
+            }
     }
 
     @Test

@@ -165,6 +165,8 @@ class KanbanBoardSwitcherModelTest {
 
         subject.model.create("New", "New")
         subject.model.idle()
+        // idle() can land between the save and the switch, so wait for the board the cache actually holds.
+        subject.repository.onBoard("new")
 
         assertTrue(calls.value.contains("POST /boards"))
         assertEquals("new", subject.model.state.value.current)
