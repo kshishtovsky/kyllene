@@ -1,6 +1,5 @@
 package dev.hermeskotlin.core.kanban
 
-import io.ktor.util.date.getTimeMillis
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -109,7 +108,9 @@ class KanbanLive(
         var ticks = 0
         while (true) {
             delay(pollMs)
-            if (!socket.isSilent(getTimeMillis())) continue
+            // isSilent() with no argument keeps the socket's own clock: the poller and the socket must
+            // agree on "now", or a test driving virtual time can never see the 30 s silence.
+            if (!socket.isSilent()) continue
             open?.let { reload(it) }
             if (++ticks % 2 == 0 && repository.state.value.slug != null) refreshBoard()
         }

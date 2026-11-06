@@ -26,9 +26,9 @@ class KanbanRepositoryTest {
     private val boardJson = """
         {"columns":[{"name":"todo","tasks":[
                        {"id":"t_1","title":"Write it","status":"todo","priority":8,"comment_count":2,
-                        "link_counts":{"parents":0,"children":1}},
+                        "link_counts":{"parents":0,"children":1},"progress":{"done":1,"total":3}},
                        {"id":"t_1","title":"Write it","status":"todo","priority":8,"comment_count":2}]},
-                    {"name":"running","tasks":[]}],
+                     {"name":"running","tasks":[]},{"name":"done","tasks":[]}],
          "tenants":["acme"],"assignees":["coder"],"latest_event_id":285,"now":1793925302}
     """
 
@@ -145,5 +145,42 @@ class KanbanRepositoryTest {
         assertEquals(listOf("t_1"), invalidated.distinct())
         watcher.cancel()
         collector.cancel()
+    }
+
+    @Test
+    fun aStatusRowWithoutStatusFallsBackToTheRequestedOneAndCompletedLandsInDone() = runTest {
+        val repo = repository()
+        repo.bind(url, null)
+        repo.refresh()
+
+        // The plugin's own `status` payload: `status` is where it is now, `requested_status` where it was asked.
+        repo.applyEvent(
+            KanbanEvent(id = 286, taskId = "t_1", kind = "status", payload = buildJsonObject { put("requested_status", "running") }),
+        )
+        assertEquals("running", repo.state.value.column("running").tasks.single().status)
+
+        repo.applyEvent(KanbanEvent(id = 287, taskId = "t_1", kind = "completed"))
+        assertEquals("done", repo.state.value.column("done").tasks.single().status)
+        assertTrue(repo.state.value.column("running").tasks.isEmpty())
+    }
+
+    @Test
+    fun aPatchKeepsTheCountersAndRollupsOnlyTheBoardReadKnows() = runTest {
+        val repo = repository()
+        repo.bind(url, null)
+        repo.refresh()
+
+        // A frame's payload never carries progress, link counts or a title: the patch must not wipe them.
+        repo.applyEvent(
+            KanbanEvent(id = 286, taskId = "t_1", kind = "reprioritized", payload = buildJsonObject { put("priority", 3) }),
+        )
+
+        val card = repo.state.value.column("todo").tasks.single()
+        assertEquals(3, card.priority)
+        assertEquals(2, card.commentCount)
+        assertEquals(1, card.progress?.done)
+        assertEquals(3, card.progress?.total)
+        assertEquals(1, card.linkCounts.children)
+        assertEquals("Write it", card.title)
     }
 }
