@@ -25,6 +25,7 @@ import dev.hermeskotlin.core.plugins.PluginsApi
 import dev.hermeskotlin.core.cron.CronApi
 import dev.hermeskotlin.core.insights.InsightsApi
 import dev.hermeskotlin.core.kanban.KanbanApi
+import dev.hermeskotlin.core.kanban.KanbanDeepLinks
 import dev.hermeskotlin.core.kanban.KanbanRepository
 import dev.hermeskotlin.core.config.ConfigApi
 import dev.hermeskotlin.core.connection.GatewayConnection
@@ -163,4 +164,5 @@ val coreModule = module {
     single { PushApi(get()) }
     single { InboxStore(get()) }
     single { InboxLinks() }
+    single { KanbanDeepLinks() }
 }

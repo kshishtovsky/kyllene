@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.unit.LayoutDirection
 import dev.hermeskotlin.core.chat.AppLink
 import dev.hermeskotlin.core.chat.ChatHost
+import dev.hermeskotlin.core.kanban.KanbanDeepLinks
 import dev.hermeskotlin.core.chat.ChatLinks
 import dev.hermeskotlin.core.chat.InputAnswers
 import kotlinx.coroutines.launch
@@ -133,6 +134,7 @@ fun main(args: Array<String>) {
 
         val scope = rememberCoroutineScope()
         val host = remember { koin.get<ChatHost>() }
+        val kanbanLinks = remember { koin.get<KanbanDeepLinks>() }
 
         /**
          * Follows a `herald://` link. A notification's Approve or Deny answers its approval where it waits, without
@@ -153,7 +155,8 @@ fun main(args: Array<String>) {
                 return
             }
             show()
-            AppLink.parse(link)?.let(links::follow)
+            val parsed = AppLink.parse(link) ?: return
+            if (parsed is AppLink.Kanban) kanbanLinks.open(parsed.board, parsed.taskId) else links.follow(parsed)
         }
 
         LaunchedEffect(Unit) {

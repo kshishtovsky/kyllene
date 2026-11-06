@@ -32,6 +32,7 @@ import dev.hermeskotlin.core.chat.AppLink
 import dev.hermeskotlin.core.chat.ChatHost
 import dev.hermeskotlin.core.chat.ChatLinks
 import dev.hermeskotlin.core.inbox.InboxLinks
+import dev.hermeskotlin.core.kanban.KanbanDeepLinks
 import dev.hermeskotlin.core.rooms.RoomLinks
 import dev.hermeskotlin.core.chat.ComposeDraft
 import dev.hermeskotlin.core.chat.SharedContent
@@ -70,6 +71,7 @@ class HeraldActivity : FragmentActivity() {
     private val links: ChatLinks by inject()
     private val roomLinks: RoomLinks by inject()
     private val inboxLinks: InboxLinks by inject()
+    private val kanbanLinks: KanbanDeepLinks by inject()
     private val settings: SettingsStore by inject()
     private val appScope: CoroutineScope by inject()
     private val bots: BotNotifier by inject()
@@ -185,6 +187,7 @@ class HeraldActivity : FragmentActivity() {
             room != null -> roomLinks.open(room, title)
             bot != null -> links.openBot(bot, title, sessionId)
             sessionId != null -> links.open(sessionId, title)
+            link is AppLink.Kanban -> kanbanLinks.open(link.board, link.taskId)
             link != null -> links.follow(link)
             else -> return
         }

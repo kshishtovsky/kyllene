@@ -30,6 +30,9 @@ sealed interface Shortcut {
     data object CommandPalette : Shortcut
     data object Settings : Shortcut
     data object ToggleSidebar : Shortcut
+
+    /** Ctrl+Shift+B: the kanban board over the chat. */
+    data object OpenKanban : Shortcut
     data object SearchChats : Shortcut
     data object NextChat : Shortcut
     data object PreviousChat : Shortcut
@@ -119,7 +122,7 @@ sealed interface Shortcut {
                 Key.N -> if (shift) NewWindow else NewChat
                 Key.K, Key.P -> if (shift) null else CommandPalette
                 Key.Comma -> Settings
-                Key.B -> if (shift) null else ToggleSidebar
+                Key.B -> if (shift) OpenKanban else ToggleSidebar
                 Key.F -> if (shift) SearchChats else FindInChat
                 Key.M -> if (shift) ModelPicker else null
                 Key.L -> if (shift) null else FocusComposer
@@ -218,6 +221,7 @@ val SHORTCUT_GROUPS: List<Pair<String, List<Pair<String, String>>>> = listOf(
         "Command palette" to "Ctrl+K",
         "Settings" to "Ctrl+,",
         "Show or hide the sidebar" to "Ctrl+B",
+        "Kanban board" to "Ctrl+Shift+B",
         "Zoom in / out / reset" to "Ctrl+= / Ctrl+- / Ctrl+0",
         "Save a job or config.yaml" to "Ctrl+S",
         "Close the window" to "Ctrl+W",

@@ -106,6 +106,9 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import dev.hermeskotlin.core.inbox.InboxLink
 import dev.hermeskotlin.core.inbox.InboxLinks
+import dev.hermeskotlin.core.kanban.KanbanDeepLinks
+import dev.hermeskotlin.ui.kanban.KanbanPage
+import dev.hermeskotlin.ui.kanban.KanbanRouteState
 import dev.hermeskotlin.core.rooms.RoomLinks
 import org.koin.compose.koinInject
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -521,6 +524,33 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
         roomLinks.consume(link)
         closeDrawer()
     }
+    // The kanban board over the chat: the sidebar's tab, Ctrl+Shift+B, or a `herald://kanban/<board>/<taskId>` link
+    // (a card that finished, from a notification). Saved with the activity, so a rotation keeps it and its sheet.
+    val kanban = rememberSaveable(saver = KanbanRouteState.Saver) { KanbanRouteState() }
+    val kanbanLinks = koinInject<KanbanDeepLinks>()
+    val kanbanLink by kanbanLinks.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(kanbanLink) {
+        val link = kanbanLink ?: return@LaunchedEffect
+        app.cancelPendingCall()
+        kanban.show(link)
+        kanbanLinks.consume(link)
+        rooms.close()
+        openDesktopRoom = null
+        settingsOpen = false
+        pluginUrl = null
+        pluginLabel = null
+        closeDrawer()
+    }
+    // Back gives the chat back: the card's sheet first, then the board.
+    PlatformBackHandler(enabled = kanban.open) { kanban.back() }
+    // Another gateway's boards are other boards: the open one closes rather than showing a stranger's cards.
+    var kanbanGateway by rememberSaveable { mutableStateOf(route.gateway.url) }
+    LaunchedEffect(route.gateway.url) {
+        if (route.gateway.url != kanbanGateway) {
+            kanbanGateway = route.gateway.url
+            if (kanban.open) kanban.close()
+        }
+    }
     // Another gateway's plugins are other plugins. Only a change counts: a rotation brings the same
     // gateway back, and the open page with it.
     var pluginGateway by rememberSaveable { mutableStateOf(route.gateway.url) }
@@ -557,7 +587,7 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
     // A page drawn over the chat (Settings, a plugin, the bot editor) hides it too: a banner there would time out unseen.
     val pageShown = mainPage.content != null
     val chatShown = lifecycleState.isAtLeast(Lifecycle.State.STARTED) && openRoom == null && desktopRoom == null &&
-        !settingsOpen && pluginUrl == null && editing == null && !pageShown
+        !settingsOpen && pluginUrl == null && editing == null && !pageShown && !kanban.open
     LaunchedEffect(chatShown) { others.setChatShown(chatShown) }
     // The phone's drawer over the chat: the sidebar says it all there, so the banner waits until it closes.
     val drawerOver by remember { derivedStateOf { sidebar.fraction > 0f && !sidebar.docked } }
@@ -618,6 +648,7 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
             }
             Shortcut.Settings -> true.also { settingsOpen = true }
             Shortcut.ToggleSidebar -> true.also { scope.launch { sidebar.toggle() } }
+            Shortcut.OpenKanban -> true.also { kanban.show() }
             // The sidebar has opened its search already; it has to show to be used.
             Shortcut.SearchChats -> true.also { scope.launch { sidebar.open() } }
             else -> false
@@ -691,6 +722,10 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
                         pluginUrl = route.gateway.gatewayUrl.resolve(path)
                         pluginLabel = plugin.label
                     }
+                },
+                onOpenKanban = {
+                    kanban.show()
+                    closeDrawer()
                 },
                 selectedRunning = chatState.running,
                 inboxLink = shownInboxLink,
@@ -942,6 +977,15 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
             onSignOut = app::signOut,
             onOpenGateways = onOpenGateways,
             profile = chatsProfile,
+        )
+    }
+
+    if (kanban.open) {
+        KanbanPage(
+            gateway = route.gateway,
+            profile = chatsProfile,
+            route = kanban,
+            onBack = { kanban.back() },
         )
     }
 

@@ -125,6 +125,7 @@ import dev.hermeskotlin.designsystem.components.LocalOpenModals
 import androidx.compose.runtime.mutableIntStateOf
 import dev.hermeskotlin.core.chat.ChatHost
 import com.composables.icons.lucide.Inbox
+import com.composables.icons.lucide.Kanban
 import dev.hermeskotlin.core.inbox.InboxLink
 import dev.hermeskotlin.core.inbox.InboxStore
 import dev.hermeskotlin.ui.inbox.InboxPage
@@ -334,6 +335,8 @@ fun SessionsSidebar(
     onOpenDesktopRoom: (DesktopRoom) -> Unit = {},
     /** Opens a plugin's page over the app, from the Plugins page. */
     onOpenPlugin: (DashboardPlugin) -> Unit = {},
+    /** Opens the kanban board over the app. */
+    onOpenKanban: () -> Unit = {},
     /** The open chat has a turn running. */
     selectedRunning: Boolean = false,
     /** A tapped Inbox notification the app passed on: the Inbox opens, at its run; [onInboxLinkTaken] once it has. */
@@ -929,6 +932,7 @@ fun SessionsSidebar(
                                     NavLink(Lucide.Blocks, "Capabilities", selected = pageInMain && capabilitiesOpen) { closePages(); capabilitiesOpen = true },
                                     NavLink(Lucide.Puzzle, "Plugins", selected = pageInMain && pluginsOpen) { closePages(); pluginsOpen = true },
                                     NavLink(Lucide.SlidersHorizontal, "Config", selected = pageInMain && configOpen) { closePages(); configOpen = true },
+                                    NavLink(Lucide.Kanban, "Kanban", keys = "Ctrl+Shift+B") { onOpenKanban() },
                                     NavLink(Lucide.Archive, "Archived", selected = isDesktop && state.filter == SessionListFilter.Archived) {
                                         viewModel.setFilter(SessionListFilter.Archived)
                                     },
@@ -1157,6 +1161,7 @@ internal fun SessionsSidebarSample(
                                 NavLink(Lucide.ChartColumn, "Insights") {},
                                 NavLink(Lucide.Blocks, "Capabilities") {},
                                 NavLink(Lucide.Puzzle, "Plugins") {},
+                                NavLink(Lucide.Kanban, "Kanban") {},
                                 NavLink(Lucide.Archive, "Archived") {},
                             ),
                         )
