@@ -12,7 +12,9 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -34,14 +36,15 @@ class KanbanBoardSwitcherModelTest {
 
     private fun boardsJson() = """{"boards":[${gatewayBoards.joinToString(",")}],"current":"dev"}"""
 
-    private val calls = mutableListOf<String>()
+    /** The requests the mock answered: written on the engine's own thread while the test reads it, so not a plain list. */
+    private val calls = MutableStateFlow<List<String>>(emptyList())
 
     /** One card per board, named after the board's slug: a card of the wrong board is visible at once. */
     private fun client() = createHttpClient(
         MockEngine { request ->
             val path = request.url.encodedPath.removePrefix("/api/plugins/kanban")
             val board = request.url.parameters["board"]
-            calls += "${request.method.value} $path" + (board?.let { "?board=$it" } ?: "")
+            calls.update { it + ("${request.method.value} $path" + (board?.let { "?board=$it" } ?: "")) }
             val json = when {
                 path == "/boards" && request.method == HttpMethod.Get -> boardsJson()
                 path == "/board" && request.method == HttpMethod.Get ->
@@ -125,7 +128,7 @@ class KanbanBoardSwitcherModelTest {
 
         assertEquals(listOf("t_other"), subject.cards)
         assertEquals("other", reopened.last())
-        assertTrue(calls.contains("GET /board?board=other"))
+        assertTrue(calls.value.contains("GET /board?board=other"))
 
         subject.model.select("dev")
         subject.repository.onBoard("dev")
@@ -143,12 +146,12 @@ class KanbanBoardSwitcherModelTest {
 
         subject.model.askDelete(other)
         assertEquals(other, subject.model.state.value.deleting)
-        assertTrue(calls.none { it.startsWith("DELETE") })
+        assertTrue(calls.value.none { it.startsWith("DELETE") })
 
         subject.model.confirmDelete()
         subject.model.idle()
 
-        assertTrue(calls.contains("DELETE /boards/other"))
+        assertTrue(calls.value.contains("DELETE /boards/other"))
         assertNull(subject.model.state.value.deleting)
         assertEquals(listOf("dev"), subject.model.state.value.boards.map { it.slug })
         assertEquals("dev", subject.model.state.value.current)
@@ -163,7 +166,7 @@ class KanbanBoardSwitcherModelTest {
         subject.model.create("New", "New")
         subject.model.idle()
 
-        assertTrue(calls.contains("POST /boards"))
+        assertTrue(calls.value.contains("POST /boards"))
         assertEquals("new", subject.model.state.value.current)
         assertEquals("new", subject.repository.state.value.slug)
         assertEquals("new", reopened.last())
@@ -177,7 +180,7 @@ class KanbanBoardSwitcherModelTest {
 
         subject.model.create("Bad Slug!!")
 
-        assertTrue(calls.none { it.startsWith("POST") })
+        assertTrue(calls.value.none { it.startsWith("POST") })
         assertTrue(subject.model.state.value.error?.contains("slug") == true)
     }
 }
