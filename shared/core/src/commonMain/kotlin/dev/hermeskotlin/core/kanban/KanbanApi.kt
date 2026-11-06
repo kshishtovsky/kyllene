@@ -322,6 +322,30 @@ class KanbanApi(private val client: HttpClient) {
             client.get(url.resolve("$PATH/tasks/${taskId.encodeURLPathPart()}/attachments")) { boardQuery(board) }
         }.map { it.body<AttachmentsReply>().attachments }
 
+    /** `GET /attachments/{id}` — the file's bytes. `stored_path` is a server path and never a download route. */
+    suspend fun attachment(url: GatewayUrl, attachmentId: Long, board: String? = null): ApiResult<ByteArray> =
+        apiCall {
+            client.get(url.resolve("$PATH/attachments/$attachmentId")) { boardQuery(board) }
+        }.map { it.body<ByteArray>() }
+
+    /** `DELETE /attachments/{id}` — the row and the file on the server's disk both go. */
+    suspend fun deleteAttachment(url: GatewayUrl, attachmentId: Long): ApiResult<Unit> = apiCall {
+        client.delete(url.resolve("$PATH/attachments/$attachmentId"))
+    }.map { }
+
+    /**
+     * `POST /tasks/{id}/estimate` — an auxiliary LLM call that takes a second or two and stores nothing. A refusal
+     * ("too short") is a 200 with `ok=false` and a [KanbanEstimate.reason], not an error.
+     */
+    suspend fun estimateTask(url: GatewayUrl, taskId: String, board: String? = null): ApiResult<KanbanEstimate> =
+        apiCall {
+            client.post(url.resolve("$PATH/tasks/${taskId.encodeURLPathPart()}/estimate")) {
+                boardQuery(board)
+                contentType(ContentType.Application.Json)
+                setBody("{}")
+            }
+        }.map { it.body<KanbanEstimate>() }
+
     /** `GET /tasks/{id}/log` — the worker's output; [tail] caps the bytes the server reads. */
     suspend fun log(url: GatewayUrl, taskId: String, tail: Int? = null, board: String? = null): ApiResult<KanbanLog> =
         apiCall {
