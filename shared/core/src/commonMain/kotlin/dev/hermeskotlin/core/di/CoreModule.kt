@@ -24,7 +24,11 @@ import dev.hermeskotlin.core.plugins.NextPromptApi
 import dev.hermeskotlin.core.plugins.PluginsApi
 import dev.hermeskotlin.core.cron.CronApi
 import dev.hermeskotlin.core.insights.InsightsApi
+import dev.hermeskotlin.core.kanban.GatewayKanbanEvents
 import dev.hermeskotlin.core.kanban.KanbanApi
+import dev.hermeskotlin.core.kanban.KanbanEventSource
+import dev.hermeskotlin.core.kanban.KanbanEventsSocket
+import dev.hermeskotlin.core.kanban.KanbanLive
 import dev.hermeskotlin.core.kanban.KanbanRepository
 import dev.hermeskotlin.core.config.ConfigApi
 import dev.hermeskotlin.core.connection.GatewayConnection
@@ -135,6 +139,9 @@ val coreModule = module {
     single { ThreadsApi(get()) }
     single { KanbanApi(get()) }
     single { KanbanRepository(get()) }
+    single<KanbanEventSource> { GatewayKanbanEvents(get(), get()) }
+    single { KanbanEventsSocket(get()) }
+    single { KanbanLive(get(), get(), get()) }
     single {
         val settings = get<SettingsStore>()
         ThreadsRepository(get(), get(), get(), get(), startInstruction = { settings.startInstruction() })
