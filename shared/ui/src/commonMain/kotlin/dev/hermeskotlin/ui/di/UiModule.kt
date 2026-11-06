@@ -14,6 +14,7 @@ import dev.hermeskotlin.ui.sessions.ConfigViewModel
 import dev.hermeskotlin.ui.plugins.PluginsViewModel
 import dev.hermeskotlin.ui.sessions.InsightsViewModel
 import dev.hermeskotlin.ui.inbox.InboxViewModel
+import dev.hermeskotlin.ui.kanban.KanbanBoardViewModel
 import dev.hermeskotlin.core.inbox.InboxNotices
 import dev.hermeskotlin.core.inbox.NoInboxNotices
 import dev.hermeskotlin.ui.sessions.ScheduledViewModel
@@ -75,6 +76,7 @@ val uiModule = module {
         )
     }
     viewModelOf(::SettingsViewModel)
+    viewModelOf(::KanbanBoardViewModel)
     single { ReplySpeakerSource() }
     // Watched places are the platform's; one without them shows none.
     viewModel { PhoneToolsViewModel(get(), get(), getOrNull<WatchedPlaces>() ?: NoWatchedPlaces) }
