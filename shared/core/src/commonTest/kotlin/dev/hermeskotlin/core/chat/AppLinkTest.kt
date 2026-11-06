@@ -44,6 +44,17 @@ class AppLinkTest {
     }
 
     @Test
+    fun aKanbanLinkNamesItsBoardAndCard() {
+        assertEquals(AppLink.Kanban("dev", "t_d2efca37"), AppLink.parse("hermes://kanban/dev/t_d2efca37"))
+        assertEquals(AppLink.Kanban("dev", "t_1"), AppLink.parse("herald://KANBAN/dev/t_1/?from=push#top"))
+        // A board alone doesn't say which card, and a card alone doesn't say which board.
+        assertNull(AppLink.parse("hermes://kanban/dev"))
+        assertNull(AppLink.parse("hermes://kanban"))
+        assertNull(AppLink.parse("hermes://kanban/dev/t_1/extra"))
+        assertNull(AppLink.parse("hermes://kanban/dev/"))
+    }
+
+    @Test
     fun ignoresOtherLinks() {
         assertNull(AppLink.parse("https://example.com/new-chat"))
         assertNull(AppLink.parse("hermes://settings"))

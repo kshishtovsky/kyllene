@@ -148,6 +148,7 @@
                 <data android:host="voice-chat" />
                 <data android:host="session" />
                 <data android:host="bot" />
+                <data android:host="kanban" />
             </intent-filter>
             <!--
                 The browser sign-in ends at <applicationId>:/signed-in (LoopbackHttpReceiver): it closes the browser

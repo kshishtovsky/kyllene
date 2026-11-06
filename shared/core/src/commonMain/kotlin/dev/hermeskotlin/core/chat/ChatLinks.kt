@@ -82,6 +82,8 @@ class ChatLinks {
         AppLink.VoiceChat -> newChat(ComposeDraft(start = DraftStart.VoiceChat))
         is AppLink.Session -> open(link.id, title = null)
         is AppLink.Bot -> openBot(link.profile, label = null)
+        // A board is not a chat: KanbanDeepLinks hands it to the screens.
+        is AppLink.Kanban -> Unit
     }
 
     /** Clears [link] once opened, unless a newer one came in meanwhile. */

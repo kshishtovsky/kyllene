@@ -17,6 +17,9 @@ sealed interface AppLink {
     /** `hermes://bot/<profile>`: that bot's permanent chat, the link Hermes Desktop uses for a bot. */
     data class Bot(val profile: String) : AppLink
 
+    /** `hermes://kanban/<board>/<taskId>`: that board, opened at that card. */
+    data class Kanban(val board: String, val taskId: String) : AppLink
+
     companion object {
         const val SCHEME = "hermes"
 
@@ -39,6 +42,7 @@ sealed interface AppLink {
                 "voice-chat" -> VoiceChat.takeIf { segments.isEmpty() }
                 "session" -> segments.singleOrNull()?.takeIf { it.isNotBlank() }?.let(::Session)
                 "bot" -> segments.singleOrNull()?.takeIf { it.isNotBlank() }?.let(::Bot)
+                "kanban" -> segments.takeIf { it.size == 2 && it.all { part -> part.isNotBlank() } }?.let { Kanban(it[0], it[1]) }
                 else -> null
             }
         }
