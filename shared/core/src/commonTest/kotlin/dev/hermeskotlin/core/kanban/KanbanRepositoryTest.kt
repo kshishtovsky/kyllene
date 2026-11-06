@@ -7,6 +7,9 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -110,5 +113,37 @@ class KanbanRepositoryTest {
 
         assertTrue(repo.state.value.board.columns.isEmpty())
         assertEquals(null, repo.state.value.slug)
+    }
+
+    @Test
+    fun aFramesRowsLandTogetherAndOnlyTheOpenCardsAreInvalidated() = runTest {
+        val repo = repository()
+        repo.bind(url, null)
+        repo.refresh()
+        val invalidated = mutableListOf<String>()
+        val collector = launch(UnconfinedTestDispatcher(testScheduler)) { repo.invalidated.toList(invalidated) }
+        val seen = mutableListOf<KanbanState>()
+        val watcher = launch(UnconfinedTestDispatcher(testScheduler)) { repo.state.toList(seen) }
+
+        // One frame: the card moves, gains a comment, and a row for a card this board doesn't hold rides along.
+        repo.applyEvents(
+            listOf(
+                KanbanEvent(id = 291, taskId = "t_1", kind = "status", payload = buildJsonObject { put("status", "running") }),
+                KanbanEvent(id = 292, taskId = "t_1", kind = "commented"),
+                KanbanEvent(id = 293, taskId = "t_gone", kind = "status", payload = buildJsonObject { put("status", "done") }),
+            ),
+        )
+
+        val card = repo.state.value.column("running").tasks.single()
+        assertEquals("t_1", card.id)
+        assertEquals(3, card.commentCount)
+        // The unknown card's row is ignored, so the board's cursor stops at the last row it applied.
+        assertEquals(292L, repo.state.value.board.latestEventId)
+        assertEquals(293L, repo.state.value.lastEvent?.id)
+        // The board moved once for three rows, and the sheet heard about the one card that changed.
+        assertEquals(2, seen.size)
+        assertEquals(listOf("t_1"), invalidated.distinct())
+        watcher.cancel()
+        collector.cancel()
     }
 }
