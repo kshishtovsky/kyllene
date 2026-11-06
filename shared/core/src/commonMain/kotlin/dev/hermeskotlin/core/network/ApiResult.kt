@@ -11,6 +11,12 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 /** Outcome of an authenticated dashboard call. */
 sealed interface ApiResult<out T> {
@@ -33,7 +39,21 @@ sealed interface ApiResult<out T> {
 }
 
 @Serializable
-private data class ErrorBody(val detail: String? = null, val error: String? = null, val message: String? = null)
+private data class ErrorBody(val detail: JsonElement? = null, val error: String? = null, val message: String? = null)
+
+/** One line of a structured `detail`, or null when it says nothing (an empty array, a bare flag). */
+private fun JsonElement?.asErrorText(): String? = when (this) {
+    null, is JsonNull -> null
+    is JsonPrimitive -> contentOrNull
+    is JsonArray -> mapNotNull { row ->
+        when (row) {
+            is JsonObject -> (row["msg"] as? JsonPrimitive)?.contentOrNull
+            is JsonPrimitive -> row.contentOrNull
+            else -> null
+        }
+    }.takeIf { it.isNotEmpty() }?.joinToString("; ")
+    is JsonObject -> (get("msg") as? JsonPrimitive)?.contentOrNull ?: toString()
+}
 
 /** Runs [block] and classifies the response. [isLogin] maps 401 to [ApiResult.InvalidCredentials]. */
 internal suspend fun apiCall(isLogin: Boolean = false, block: suspend () -> HttpResponse): ApiResult<HttpResponse> =
@@ -63,10 +83,10 @@ const val ACCESS_BLOCKED =
 
 private val HttpResponse.isJson: Boolean get() = contentType()?.match(ContentType.Application.Json) == true
 
-/** `detail` is FastAPI's error key; it is a plain string except for a few structured 503s. */
+/** `detail` is FastAPI's error key: a string, a `{msg}` object, or a validation array of `{loc,msg}` rows. */
 private suspend fun HttpResponse.errorMessage(): String {
     val body = runCatching { body<ErrorBody>() }.getOrNull()
-    return body?.detail ?: body?.message ?: body?.error ?: "HTTP ${status.value}"
+    return body?.detail.asErrorText() ?: body?.message ?: body?.error ?: "HTTP ${status.value}"
 }
 
 /** Transforms a success value; a failing transform (bad JSON) becomes [ApiResult.Failed]. */
