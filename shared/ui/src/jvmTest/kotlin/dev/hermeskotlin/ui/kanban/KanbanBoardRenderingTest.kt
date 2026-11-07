@@ -5,6 +5,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.runComposeUiTest
 import com.composeunstyled.theme.ColorScheme
 import dev.hermeskotlin.core.kanban.KanbanBoard
@@ -17,6 +18,7 @@ import dev.hermeskotlin.core.kanban.KanbanWarnings
 import dev.hermeskotlin.designsystem.HermesTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** The board the screen draws: eight lanes, a card with every badge, the empty board and the first load. */
 @OptIn(ExperimentalTestApi::class)
@@ -66,6 +68,37 @@ class KanbanBoardRenderingTest {
         onNodeWithContentDescription("4 comments").assertExists()
         onNodeWithContentDescription("5 parents, 1 child").assertExists()
         onNodeWithContentDescription("3 warnings").assertExists()
+    }
+
+    /**
+     * The footer is the card's last line and sits on the card's bottom padding, not in a band of its own: the
+     * assignee's tap target once inflated the row, leaving dead space under the badges.
+     */
+    @Test
+    fun theFooterHugsTheCardsBottom() = runComposeUiTest {
+        setContent {
+            HermesTheme(ColorScheme.Dark) { KanbanBoardContent(KanbanState(board = board(card)), "Dev", desktop = true) }
+        }
+        val cardBox = onNodeWithTag("kanban-card-${card.id}", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val footer = onNodeWithTag("kanban-card-meta-${card.id}", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val below = (cardBox.bottom - footer.bottom).value
+        assertTrue(below in 8f..13f, "footer sits $below dp above the card's bottom")
+    }
+
+    /**
+     * A lane is 150–200dp wide, and a card here carries every badge at once: a footer that doesn't wrap squeezes the
+     * last ones to zero width, and their text runs down the card in a column instead of sitting on the line.
+     */
+    @Test
+    fun aNarrowLaneWrapsTheFooterInsteadOfCrushingIt() = runComposeUiTest {
+        setContent {
+            HermesTheme(ColorScheme.Dark) { KanbanBoardContent(KanbanState(board = board(card)), "Dev", desktop = true) }
+        }
+        for (text in listOf("3/7", "t_f9bdee25", "acme")) {
+            val box = onNodeWithText(text, useUnmergedTree = true).getUnclippedBoundsInRoot()
+            val width = (box.right - box.left).value
+            assertTrue(width > 10f, "\"$text\" is squeezed to $width dp")
+        }
     }
 
     @Test

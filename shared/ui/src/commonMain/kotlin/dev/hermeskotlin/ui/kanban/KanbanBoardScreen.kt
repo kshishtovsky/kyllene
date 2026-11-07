@@ -420,10 +420,12 @@ private fun KanbanCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(
+            // A lane is 150–200dp wide: the badges wrap onto a second line there rather than being crushed to
+            // nothing, which is what a single non-wrapping row did.
+            FlowRow(
                 modifier = Modifier.fillMaxWidth().testTag("kanban-card-meta-${task.id}"),
-                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 AssigneeAvatar(task.assignee, assignees, onAssign)
                 if (running) {
@@ -446,7 +448,6 @@ private fun KanbanCard(
                 task.tenant?.takeIf { it.isNotBlank() }?.let {
                     Text(it, style = Theme[typography][bodySmall].copy(fontSize = 12.sp), color = Theme[colors][textTertiary], maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Spacer(Modifier.weight(1f))
                 if (task.priority != 0) {
                     Glyph(Lucide.Flag, "${task.priority}", "Priority ${task.priority}", if (task.priority >= 5) Theme[colors][warning] else Theme[colors][textTertiary])
                 }
@@ -481,7 +482,6 @@ private fun KanbanCard(
                     color = Theme[colors][textMuted],
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
                 )
             }
         }
