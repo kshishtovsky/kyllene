@@ -12,7 +12,9 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -34,14 +36,18 @@ class KanbanBoardSwitcherModelTest {
 
     private fun boardsJson() = """{"boards":[${gatewayBoards.joinToString(",")}],"current":"dev"}"""
 
-    private val calls = mutableListOf<String>()
+    /** The requests the mock answered, written on the engine's own thread while the test reads it: not a plain list. */
+    private val calls = MutableStateFlow<List<String>>(emptyList())
+
+    /** The slugs the model restarted its stream on; appended from a launched coroutine, read here. */
+    private val reopened = MutableStateFlow<List<String>>(emptyList())
 
     /** One card per board, named after the board's slug: a card of the wrong board is visible at once. */
     private fun client() = createHttpClient(
         MockEngine { request ->
             val path = request.url.encodedPath.removePrefix("/api/plugins/kanban")
             val board = request.url.parameters["board"]
-            calls += "${request.method.value} $path" + (board?.let { "?board=$it" } ?: "")
+            calls.update { it + ("${request.method.value} $path" + (board?.let { "?board=$it" } ?: "")) }
             val json = when {
                 path == "/boards" && request.method == HttpMethod.Get -> boardsJson()
                 path == "/board" && request.method == HttpMethod.Get ->
@@ -64,11 +70,11 @@ class KanbanBoardSwitcherModelTest {
     }
 
     /** The model with the board cache it feeds, and the slugs its stream was restarted on. */
-    private fun TestScope.subject(store: InMemoryKeyValueStore = InMemoryKeyValueStore()): Pair<Subject, List<String>> {
-        val reopened = mutableListOf<String>()
+    private fun TestScope.subject(store: InMemoryKeyValueStore = InMemoryKeyValueStore()): Pair<Subject, MutableStateFlow<List<String>>> {
+        reopened.value = emptyList()
         val api = KanbanApi(client())
         val repository = KanbanRepository(api)
-        val model = KanbanBoardSwitcherModel(api, repository, store, this, reopenEvents = { reopened += it })
+        val model = KanbanBoardSwitcherModel(api, repository, store, this, reopenEvents = { slug -> reopened.update { it + slug } })
         return Subject(model, repository) to reopened
     }
 
@@ -79,6 +85,11 @@ class KanbanBoardSwitcherModelTest {
 
     private suspend fun KanbanBoardSwitcherModel.idle() = withContext(Dispatchers.Default) {
         withTimeout(5_000) { state.first { !it.saving && !it.loading } }
+    }
+
+    /** Waits for the switch's stream restart to reach [slug]: the model fires it from a coroutine of its own. */
+    private suspend fun awaitReopened(slug: String) = withContext(Dispatchers.Default) {
+        withTimeout(5_000) { reopened.first { it.lastOrNull() == slug } }
     }
 
     private suspend fun KanbanRepository.onBoard(slug: String) = withContext(Dispatchers.Default) {
@@ -100,7 +111,7 @@ class KanbanBoardSwitcherModelTest {
         first.model.select("other")
         first.repository.onBoard("other")
         assertEquals("other", first.model.state.value.current)
-        assertEquals("other", reopened.last())
+        assertEquals("other", reopened.value.last())
 
         // A new session on the same gateway and profile opens the board the user left on, not the gateway's own.
         val (second, reopenedAgain) = subject(store)
@@ -109,7 +120,7 @@ class KanbanBoardSwitcherModelTest {
         second.repository.onBoard("other")
 
         assertEquals("other", second.model.state.value.current)
-        assertEquals(listOf("other"), reopenedAgain)
+        assertEquals(listOf("other"), reopenedAgain.value)
         assertEquals(listOf("t_other"), second.cards)
     }
 
@@ -124,14 +135,14 @@ class KanbanBoardSwitcherModelTest {
         subject.repository.onBoard("other")
 
         assertEquals(listOf("t_other"), subject.cards)
-        assertEquals("other", reopened.last())
-        assertTrue(calls.contains("GET /board?board=other"))
+        assertEquals("other", reopened.value.last())
+        assertTrue(calls.value.contains("GET /board?board=other"))
 
         subject.model.select("dev")
         subject.repository.onBoard("dev")
 
         assertEquals(listOf("t_dev"), subject.cards)
-        assertEquals("dev", reopened.last())
+        assertEquals("dev", reopened.value.last())
     }
 
     @Test
@@ -143,12 +154,12 @@ class KanbanBoardSwitcherModelTest {
 
         subject.model.askDelete(other)
         assertEquals(other, subject.model.state.value.deleting)
-        assertTrue(calls.none { it.startsWith("DELETE") })
+        assertTrue(calls.value.none { it.startsWith("DELETE") })
 
         subject.model.confirmDelete()
         subject.model.idle()
 
-        assertTrue(calls.contains("DELETE /boards/other"))
+        assertTrue(calls.value.contains("DELETE /boards/other"))
         assertNull(subject.model.state.value.deleting)
         assertEquals(listOf("dev"), subject.model.state.value.boards.map { it.slug })
         assertEquals("dev", subject.model.state.value.current)
@@ -162,11 +173,14 @@ class KanbanBoardSwitcherModelTest {
 
         subject.model.create("New", "New")
         subject.model.idle()
+        // The switch restarts the stream from a coroutine of the model's: waiting on the board says it landed.
+        subject.repository.onBoard("new")
+        awaitReopened("new")
 
-        assertTrue(calls.contains("POST /boards"))
+        assertTrue(calls.value.contains("POST /boards"))
         assertEquals("new", subject.model.state.value.current)
         assertEquals("new", subject.repository.state.value.slug)
-        assertEquals("new", reopened.last())
+        assertEquals("new", reopened.value.last())
     }
 
     @Test
@@ -177,7 +191,7 @@ class KanbanBoardSwitcherModelTest {
 
         subject.model.create("Bad Slug!!")
 
-        assertTrue(calls.none { it.startsWith("POST") })
+        assertTrue(calls.value.none { it.startsWith("POST") })
         assertTrue(subject.model.state.value.error?.contains("slug") == true)
     }
 }
