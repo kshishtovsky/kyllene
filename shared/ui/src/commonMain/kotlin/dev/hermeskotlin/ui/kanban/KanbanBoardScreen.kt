@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -406,10 +407,12 @@ private fun KanbanCard(
 ) {
     val running = task.status == "running"
     Surface(
-        Modifier.fillMaxWidth().handCursor().clickable(onClick = onClick),
+        Modifier.fillMaxWidth().handCursor().clickable(onClick = onClick).testTag("kanban-card-${task.id}"),
         color = Theme[colors][surface2],
     ) {
-        Column(Modifier.padding(11.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // The card is a title over one footer line, as the dashboard's is: the footer hugs the card's bottom
+        // edge, so nothing floats in a band of its own.
+        Column(Modifier.padding(start = 11.dp, end = 11.dp, top = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 task.title.ifBlank { "Untitled" },
                 style = Theme[typography][body],
@@ -417,23 +420,35 @@ private fun KanbanCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                task.id,
-                style = Theme[typography][codeStyle].copy(fontSize = 11.sp),
-                color = Theme[colors][textMuted],
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(9.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+            Row(
+                modifier = Modifier.fillMaxWidth().testTag("kanban-card-meta-${task.id}"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 AssigneeAvatar(task.assignee, assignees, onAssign)
-                if (task.priority != 0) {
-                    Glyph(Lucide.Flag, "${task.priority}", "Priority ${task.priority}", if (task.priority >= 5) Theme[colors][warning] else Theme[colors][textTertiary])
+                if (running) {
+                    val seconds = rememberRunClock(task, boardNow, visible)
+                    if (seconds != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Spinner(Modifier.size(10.dp), Theme[colors][success])
+                            Text(formatRunClock(seconds), style = Theme[typography][codeStyle].copy(fontSize = 11.sp), color = Theme[colors][success])
+                        }
+                    }
+                }
+                if (task.status == "blocked") {
+                    blockKindLabel(task.blockKind)?.let {
+                        Text(it, style = Theme[typography][bodySmall].copy(fontSize = 12.sp), color = Theme[colors][danger], maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (task.blockRecurrences > 0) {
+                        Text("×${task.blockRecurrences}", style = Theme[typography][codeStyle].copy(fontSize = 11.sp), color = Theme[colors][textTertiary])
+                    }
                 }
                 task.tenant?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, style = Theme[typography][bodySmall], color = Theme[colors][textTertiary], maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(it, style = Theme[typography][bodySmall].copy(fontSize = 12.sp), color = Theme[colors][textTertiary], maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.weight(1f))
+                if (task.priority != 0) {
+                    Glyph(Lucide.Flag, "${task.priority}", "Priority ${task.priority}", if (task.priority >= 5) Theme[colors][warning] else Theme[colors][textTertiary])
                 }
                 task.progress?.let {
                     Text("${it.done}/${it.total}", style = Theme[typography][codeStyle].copy(fontSize = 11.sp), color = Theme[colors][textSecondary])
@@ -460,26 +475,14 @@ private fun KanbanCard(
                         onClick = onClick,
                     )
                 }
-            }
-            if (running) {
-                val seconds = rememberRunClock(task, boardNow, visible)
-                if (seconds != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Spinner(Modifier.size(11.dp), Theme[colors][success])
-                        Text(formatRunClock(seconds), style = Theme[typography][codeStyle].copy(fontSize = 11.sp), color = Theme[colors][success])
-                    }
-                }
-            }
-            val blocked = task.status == "blocked"
-            if (blocked && (blockKindLabel(task.blockKind) != null || task.blockRecurrences > 0)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    blockKindLabel(task.blockKind)?.let {
-                        Text(it, style = Theme[typography][bodySmall], color = Theme[colors][danger], maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    if (task.blockRecurrences > 0) {
-                        Text("×${task.blockRecurrences}", style = Theme[typography][codeStyle].copy(fontSize = 11.sp), color = Theme[colors][textTertiary])
-                    }
-                }
+                Text(
+                    task.id,
+                    style = Theme[typography][codeStyle].copy(fontSize = 11.sp),
+                    color = Theme[colors][textMuted],
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
             }
         }
     }
@@ -523,7 +526,7 @@ private fun AssigneeAvatar(assignee: String?, assignees: List<String>, onAssign:
             // The avatar is the anchor: tap it to hand the card to someone else.
             Box(
                 Modifier
-                    .size(40.dp)
+                    .size(28.dp)
                     .handCursor()
                     .clickable { open = true }
                     .semantics { contentDescription = assignee?.let { "Assignee $it" } ?: "Unassigned" },
@@ -531,7 +534,7 @@ private fun AssigneeAvatar(assignee: String?, assignees: List<String>, onAssign:
             ) {
                 Box(
                     Modifier
-                        .size(22.dp)
+                        .size(20.dp)
                         .clip(CircleShape)
                         .background(if (assignee == null) Theme[colors][surface3] else Theme[colors][accentSoft])
                         .border(1.dp, Theme[colors][stroke], CircleShape),
