@@ -55,6 +55,9 @@ sealed interface Shortcut {
     /** Ctrl+J: puts the file rail away, or brings it back. */
     data object ToggleRail : Shortcut
 
+    /** Ctrl+\: adds a pane beside the focused one, as the button in the chat's top bar does. */
+    data object SplitScreen : Shortcut
+
     /** Ctrl+S: saves the page being edited (a job, config.yaml). */
     data object Save : Shortcut
 
@@ -127,6 +130,7 @@ sealed interface Shortcut {
                 Key.M -> if (shift) ModelPicker else null
                 Key.L -> if (shift) null else FocusComposer
                 Key.J -> if (shift) null else ToggleRail
+                Key.Backslash -> if (shift) null else SplitScreen
                 Key.S -> if (shift) null else Save
                 Key.Slash -> ShortcutsHelp
                 Key.W -> if (shift) null else CloseWindow
@@ -208,6 +212,7 @@ val SHORTCUT_GROUPS: List<Pair<String, List<Pair<String, String>>>> = listOf(
         "Search chats" to "Ctrl+Shift+F",
         "Find in this chat" to "Ctrl+F",
         "Hide or show the open file" to "Ctrl+J",
+        "Split the screen beside the chat" to "Ctrl+\\",
         "Files and folders in a prompt" to "@file: / @folder:",
         "Open in a new window" to "Ctrl+Shift+N",
         "Open a chat in a new window" to "Ctrl+click",

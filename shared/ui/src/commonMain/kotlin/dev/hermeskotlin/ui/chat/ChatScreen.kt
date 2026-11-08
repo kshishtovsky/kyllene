@@ -249,6 +249,7 @@ import com.composables.icons.lucide.SearchCheck
 import com.composables.icons.lucide.TriangleAlert
 import com.composables.icons.lucide.Users
 import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.PanelsTopLeft
 import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Square
 import com.composables.icons.lucide.Volume2
@@ -396,6 +397,7 @@ import dev.hermeskotlin.ui.sessions.SessionsBadge
 import dev.hermeskotlin.ui.sessions.RowContextMenu
 import dev.hermeskotlin.ui.sessions.RowMenuItem
 import dev.hermeskotlin.ui.sessions.onSecondaryPress
+import dev.hermeskotlin.ui.split.SplitAction
 
 @Composable
 fun ChatScreen(
@@ -404,6 +406,8 @@ fun ChatScreen(
     onNewChat: () -> Unit,
     /** The open chat's options, given the button's bounds in the window; null until it exists on the gateway. */
     onOpenMenu: ((Rect?) -> Unit)?,
+    /** The split screen's button beside it; null when this chat is not one of its panes. */
+    split: SplitAction? = null,
     /** Opens another stored chat by id and title (`/resume`, `/branch`). */
     onOpenChat: (String, String?) -> Unit,
     /** Switches profile (`/profile`); null is the gateway's launch profile. */
@@ -600,6 +604,7 @@ fun ChatScreen(
         // Already on an untouched new chat: nothing to start over from.
         onNewChat = onNewChat.takeIf { target.storedSessionId != null || state.messages.isNotEmpty() },
         onOpenMenu = onOpenMenu,
+        split = split,
         onOpenModels = { modelsOpen = true },
         // A desktop has no camera, and its file dialog picks photos as well: + goes straight to it.
         onAttach = { if (isDesktop) attachmentPicker.pickFiles() else attachOpen = true },
@@ -759,6 +764,7 @@ internal fun ChatView(
     onOpenSidebar: () -> Unit,
     onNewChat: (() -> Unit)?,
     onOpenMenu: ((Rect?) -> Unit)?,
+    split: SplitAction? = null,
     onOpenModels: () -> Unit,
     onAttach: () -> Unit,
     onDictate: () -> Unit,
@@ -849,6 +855,7 @@ internal fun ChatView(
                 onOpenSidebar = onOpenSidebar,
                 onNewChat = onNewChat,
                 onOpenMenu = onOpenMenu,
+                split = split,
                 sessionsBadge = sessionsBadge,
                 onNextChat = onNextChat,
             )
@@ -1507,6 +1514,8 @@ internal fun TopBar(
     onOpenSidebar: () -> Unit,
     onNewChat: (() -> Unit)?,
     onOpenMenu: ((Rect?) -> Unit)?,
+    /** The split screen's button, inside the pill beside the menu; null shows none. */
+    split: SplitAction? = null,
     /** In place of New chat and the menu, e.g. a room's own buttons. */
     trailing: (@Composable () -> Unit)? = null,
     /** What the Sessions button says about the other chats. */
@@ -1553,6 +1562,10 @@ internal fun TopBar(
                 trailing()
             } else {
                 BarButton(Lucide.SquarePen, "New chat", onClick = { onNewChat?.invoke() }, enabled = onNewChat != null, keys = "Ctrl+N")
+                // Beside the menu the button belongs to, and off rather than silently doing nothing.
+                split?.let { s ->
+                    BarButton(Lucide.PanelsTopLeft, "Split screen", onClick = s.onClick, enabled = s.enabled, keys = "Ctrl+\\")
+                }
                 // A plain holder: only the click reads it. The desktop's menu hangs from the button.
                 val menuButton = remember { arrayOfNulls<Rect>(1) }
                 BarButton(
