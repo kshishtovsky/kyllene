@@ -77,9 +77,7 @@ import dev.hermeskotlin.ui.chat.GatewayFileViewer
 import dev.hermeskotlin.ui.chat.ChatViewModel
 import dev.hermeskotlin.ui.chat.ModelConfirmDialog
 import dev.hermeskotlin.ui.chat.ModelSheet
-import dev.hermeskotlin.ui.chat.ProvideReplySpeaker
 import dev.hermeskotlin.ui.chat.ReplySpeakerSource
-import dev.hermeskotlin.ui.chat.replySpeaker
 import dev.hermeskotlin.ui.sessions.CapabilitiesPage
 import dev.hermeskotlin.ui.sessions.ConfigPage
 import dev.hermeskotlin.core.chat.ChatState
@@ -125,6 +123,7 @@ import dev.hermeskotlin.ui.sessions.OtherChatRow
 import dev.hermeskotlin.ui.sessions.OtherChatsViewModel
 import dev.hermeskotlin.ui.sessions.SessionsBadge
 import dev.hermeskotlin.ui.sessions.SessionsViewModel
+import dev.hermeskotlin.ui.split.SplitScreen
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
@@ -571,7 +570,6 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
     // a guessed `default` could name the wrong bot. Equal unless what's drawn changed, so a roster refresh doesn't
     // redraw the chat.
     val launchProfile = profileRoster?.takeIf { it.launchKnown }?.launch
-    val speaker = replySpeaker(faces, route.target.bot?.name, route.target.profile, launchProfile)
     // Chats in windows of their own name their bots from this roster too.
     val speakerSource = koinInject<ReplySpeakerSource>()
     SideEffect {
@@ -764,30 +762,41 @@ private fun Home(route: Route.Chat, app: AppViewModel, onOpenGateways: () -> Uni
                     onOpenFile = openRoomFile,
                 )
                 // Rooms draw their own transcripts, each bot under its own name; only the chat has one speaker.
-                else -> ProvideReplySpeaker(speaker) {
+                else -> SplitScreen(
+                    target = route.target,
+                    mainChat = chat,
+                    sessions = sessions,
+                ) { paneTarget, paneChat, main, paneKeys, actions ->
+                    // A pane beside the main one is a chat of its own: the app's menu, badge and banner stay with
+                    // the chat the app has open rather than with every pane.
                     ChatScreen(
-                        target = route.target,
+                        target = paneTarget,
                         onOpenSidebar = { scope.launch { sidebar.toggle() } },
-                        onNewChat = app::newChat,
-                        onOpenMenu = openSessionId?.let {
-                            { button ->
-                                menuAnchor = button
-                                menuOpen = true
+                        onNewChat = if (main) ({ app.newChat() }) else actions.newChat,
+                        onOpenMenu = if (!main) {
+                            null
+                        } else {
+                            openSessionId?.let {
+                                { button ->
+                                    menuAnchor = button
+                                    menuOpen = true
+                                }
                             }
                         },
+                        split = actions.split,
                         onOpenChat = { id, title -> app.openSession(id, title ?: "Untitled session") },
                         onSwitchProfile = app::switchProfile,
-                        viewModel = chat,
+                        viewModel = paneChat,
                         // Not while a page or the chat's menu covers it: typing there mustn't land in the composer.
-                        keysEnabled = chatShown && !menuOpen,
-                        sessionsBadge = if (alerts) sessionsBadge else SessionsBadge(),
-                        otherChatBanner = banner.takeIf { alerts && settings.otherChatsBanner && !drawerOver },
+                        keysEnabled = paneKeys && (!main || (chatShown && !menuOpen)),
+                        sessionsBadge = if (main && alerts) sessionsBadge else SessionsBadge(),
+                        otherChatBanner = if (!main) null else banner.takeIf { alerts && settings.otherChatsBanner && !drawerOver },
                         onOpenOtherChat = { event: OtherChatEvent ->
                             others.dismissBanner(event)
                             openOther(event.chatId, event.title, event.bot)
                         },
                         onDismissOtherChat = others::dismissBanner,
-                        onNextChat = if (!alerts) null else fun(): Boolean {
+                        onNextChat = if (!main || !alerts) null else fun(): Boolean {
                             val next = others.nextChat()
                             if (next != null) {
                                 banner?.let(others::dismissBanner)
