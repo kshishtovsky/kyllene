@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.em
@@ -34,6 +35,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import com.composables.icons.lucide.AppWindow
 import dev.hermeskotlin.ui.clearOfWindowControls
 import dev.hermeskotlin.ui.CopyableOnDesktop
@@ -43,6 +46,7 @@ import dev.hermeskotlin.ui.keysLabel
 import com.composables.icons.lucide.MessageCircle
 import com.composables.icons.lucide.MessageCircleQuestion
 import com.composables.icons.lucide.MessageSquare
+import com.composables.icons.lucide.PanelsTopLeft
 import com.composables.icons.lucide.PencilLine
 import com.composables.icons.lucide.ShieldAlert
 import dev.hermeskotlin.core.chat.Waiting
@@ -57,10 +61,11 @@ import dev.hermeskotlin.designsystem.surface3
 import dev.hermeskotlin.designsystem.textMuted
 import dev.hermeskotlin.designsystem.warningSoft
 import dev.hermeskotlin.ui.chat.AppMark
+import dev.hermeskotlin.ui.split.ChatDrag
+import dev.hermeskotlin.ui.split.PaneChat
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import dev.hermeskotlin.designsystem.components.Chip
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -172,8 +177,10 @@ import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.ArrowDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.key
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -991,6 +998,7 @@ fun SessionsSidebar(
         onMakeThread = viewModel::makeThread.takeIf {
             actionTarget?.let { s -> !s.archived && threads.none { t -> t.holds(s) } } == true
         },
+        onOpenBeside = { ChatDrag.openBeside(PaneChat(it.id, it.displayTitle, null)) },
     )
     ThreadActionsSheet(
         row = threadActions,
@@ -2437,6 +2445,9 @@ private fun SessionRowContent(
 ) {
     // A desktop row is cut to a mouse's scale, as desktop sidebars list their items; a phone's to a thumb's.
     val shape = RoundedCornerShape(Theme[radii][if (isDesktop) radiusSmall else radiusMedium])
+    val lifted = ChatDrag.chat?.chatId == session.id
+    // Where the row is on screen, as a drag's pointer comes in its own coordinates.
+    var origin by remember { mutableStateOf(Offset.Zero) }
     val tone = rowTone(status, draft)
     val line = rowStatusLine(status, draft)
     val toneColor = Theme[colors][
@@ -2460,13 +2471,39 @@ private fun SessionRowContent(
                 },
             )
             .handCursor()
-            .combinedClickable(
+            .onGloballyPositioned { origin = it.positionInRoot() }
+            .graphicsLayer { alpha = if (lifted) 0.5f else 1f }
+            .clickable(
                 onClick = onClick,
-                onLongClick = onActions,
-                onLongClickLabel = "Session actions",
+                // The chat is out of the list in the hand: a tap now would open it while it is being dragged.
+                enabled = !lifted,
                 interactionSource = null,
                 indication = rememberHoverIndication(Theme[colors][text]),
             )
+            .semantics { onLongClick("Session actions") { onActions(); true } }
+            .pointerInput(session.id) {
+                // A hold lifts the chat out of the list; let go without moving it, its menu opens as before.
+                var moved = false
+                detectDragGesturesAfterLongPress(
+                    onDragStart = {
+                        moved = false
+                        ChatDrag.lift(session.id, session.displayTitle)
+                    },
+                    onDrag = { change, _ ->
+                        moved = true
+                        ChatDrag.moveTo(origin + change.position)
+                    },
+                    onDragEnd = {
+                        if (moved) {
+                            ChatDrag.drop()
+                        } else {
+                            ChatDrag.cancel()
+                            onActions()
+                        }
+                    },
+                    onDragCancel = { ChatDrag.cancel() },
+                )
+            }
             .padding(horizontal = 10.dp, vertical = if (isDesktop) 5.dp else 8.dp),
         horizontalArrangement = Arrangement.spacedBy(if (isDesktop) 10.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2876,6 +2913,8 @@ internal fun SessionActionsSheet(
     onStartFresh: ((SessionSummary) -> Unit)? = null,
     /** Makes the chat a thread; null when it can't be one (a thread's chat already, or archived). */
     onMakeThread: ((SessionSummary) -> Unit)? = null,
+    /** Opens the chat beside the focused pane, splitting it: a phone's way to split without dragging it there. */
+    onOpenBeside: ((SessionSummary) -> Unit)? = null,
     /** The button it opened from, on the desktop; null opens it at the pointer, as a right-click's menu. */
     anchor: Rect? = null,
 ) {
@@ -2894,6 +2933,7 @@ internal fun SessionActionsSheet(
         onStartFresh?.let { SheetAction("Start fresh", Lucide.RotateCcw, act(it)) }
         onRename?.let { SheetAction("Rename", Lucide.Pencil, act(it)) }
         onMakeThread?.let { SheetAction("Make thread", Lucide.Hash, act(it)) }
+        onOpenBeside?.let { SheetAction("Open beside", Lucide.PanelsTopLeft, act(it)) }
         onTogglePinned?.let { SheetAction(if (s.pinned) "Unpin" else "Pin", if (s.pinned) Lucide.PinOff else Lucide.Pin, act(it)) }
         onUsage?.let { SheetAction("Usage and cost", Lucide.Gauge, act(it)) }
         onProcesses?.let { SheetAction("Background processes", Lucide.SquareTerminal, act(it)) }

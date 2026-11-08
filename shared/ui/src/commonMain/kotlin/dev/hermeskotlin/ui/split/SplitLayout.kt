@@ -51,8 +51,9 @@ data class SplitLayout private constructor(
     val focused: String? get() = focusedPaneId
 
     /**
-     * Splits [paneId] in two, the new empty pane taking the focus. Null when the tree is full, when [paneId] is not
-     * there, or when [paneDp] (what the pane currently measures along [axis]) cannot give both halves [minPaneDp].
+     * Splits [paneId] in two, the new empty pane taking the focus: second, or first with [newPaneFirst]. Null when
+     * the tree is full, when [paneId] is not there, or when [paneDp] (what the pane currently measures along [axis])
+     * cannot give both halves [minPaneDp].
      */
     fun split(
         paneId: String,
@@ -60,16 +61,18 @@ data class SplitLayout private constructor(
         newPaneId: String,
         paneDp: Float? = null,
         minPaneDp: Float = MIN_PANE_WIDTH_DP,
+        newPaneFirst: Boolean = false,
     ): SplitLayout? {
         val pane = findPane(root, paneId) ?: return null
         if (count >= MAX_PANES) return null
         if (paneDp != null && paneDp < 2 * minPaneDp) return null
+        val added = SplitNode.Pane(newPaneId, PaneChat(null, null, pane.chat.profile))
         val branch = SplitNode.Branch(
             id = "b:$newPaneId",
             axis = axis,
             fraction = 0.5f,
-            first = pane,
-            second = SplitNode.Pane(newPaneId, PaneChat(null, null, pane.chat.profile)),
+            first = if (newPaneFirst) added else pane,
+            second = if (newPaneFirst) pane else added,
         )
         return copy(root = replacePane(root, paneId) { branch }, focusedPaneId = newPaneId)
     }

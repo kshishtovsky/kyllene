@@ -4,19 +4,24 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -27,8 +32,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Lucide
@@ -68,6 +81,7 @@ import dev.hermeskotlin.ui.chat.ProvideReplySpeakerFor
 import dev.hermeskotlin.ui.isDesktop
 import dev.hermeskotlin.ui.sessions.SessionsUiState
 import dev.hermeskotlin.ui.sessions.SessionsViewModel
+import kotlin.math.roundToInt
 import org.koin.compose.getKoin
 import org.koin.compose.koinInject
 
@@ -126,16 +140,50 @@ fun SplitScreen(
 
     // A phone splits top from bottom, a desktop side by side: the axis the panes are least cramped on.
     val axis = if (isDesktop) SplitAxis.Row else SplitAxis.Column
-    val minPane = if (axis == SplitAxis.Row) DESKTOP_MIN_PANE_WIDTH_DP else DESKTOP_MIN_PANE_HEIGHT_DP
-    // Each pane's size along that axis as it last measured, which is what a split of it has to fit in.
-    val sizes = remember { mutableMapOf<String, Float>() }
+    fun minPaneFor(along: SplitAxis) = if (along == SplitAxis.Row) DESKTOP_MIN_PANE_WIDTH_DP else DESKTOP_MIN_PANE_HEIGHT_DP
+    val minPane = minPaneFor(axis)
+    // Each pane as it last measured: what a split of it has to fit in, and where it is for a chat dragged over it
+    // from the sidebar.
+    val sizes = remember { mutableMapOf<String, DpSize>() }
+    val bounds = remember { mutableMapOf<String, Rect>() }
     val koin = getKoin()
     val mainHost = koinInject<ChatHost>()
 
+    fun sizeAlong(paneId: String, along: SplitAxis): Float? =
+        sizes[paneId]?.let { (if (along == SplitAxis.Row) it.width else it.height).value }
+
+    /** A pane makes room for a chat dropped on it: an edge gives it half, the middle puts it in the pane's place. */
+    fun dropOn(paneId: String, held: DraggedChat, zone: SplitDropZone) {
+        val along = zone.axis() ?: axis
+        val newId = "pane$nextPane"
+        layout = layout.dropChat(paneId, PaneChat(held.chatId, held.title, target.profile), zone, newId, sizeAlong(paneId, along), minPaneFor(along))
+        if (layout.leaves.any { it.id == newId }) {
+            nextPane++
+            blankPanes = blankPanes - newId
+        }
+    }
+
+    /** The sidebar's "Open beside": the focused pane splits, and the chat goes in the new half. */
+    fun openBeside(chat: PaneChat) {
+        val paneId = layout.focused ?: return
+        val newId = "pane$nextPane"
+        val split = layout.split(paneId, axis, newId, sizeAlong(paneId, axis), minPane) ?: return
+        nextPane++
+        blankPanes = blankPanes - newId
+        layout = split.replace(newId, chat)
+    }
+
     fun splitPane(paneId: String) {
-        val split = layout.split(paneId, axis, "pane$nextPane", sizes[paneId], minPane) ?: return
+        val split = layout.split(paneId, axis, "pane$nextPane", sizeAlong(paneId, axis), minPane) ?: return
         nextPane++
         layout = split
+    }
+
+    // A chat the sidebar asked to open beside the focused pane: a phone's way to split without dragging one in.
+    val beside = ChatDrag.beside
+    LaunchedEffect(beside) {
+        if (beside == null) return@LaunchedEffect
+        ChatDrag.takeBeside()?.let { openBeside(it) }
     }
 
     ShortcutHandler { shortcut ->
@@ -161,11 +209,16 @@ fun SplitScreen(
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
+                .onGloballyPositioned { bounds[node.id] = it.boundsInRoot() }
                 // A tap anywhere on the pane that its own controls didn't take makes it the focused one.
                 .pointerInput(node.id) { detectTapGestures { layout = layout.focus(node.id) } },
         ) {
-            val along = (if (axis == SplitAxis.Row) maxWidth else maxHeight).value
-            SideEffect { sizes[node.id] = along }
+            val along = sizeAlong(node.id, axis)
+            SideEffect { sizes[node.id] = DpSize(maxWidth, maxHeight) }
+            DisposableEffect(node.id, target) {
+                ChatDrag.hold(node.id, ChatDropTarget({ bounds[node.id] ?: Rect.Zero }) { held, zone -> dropOn(node.id, held, zone) })
+                onDispose { ChatDrag.forget(node.id) }
+            }
             Column(Modifier.fillMaxSize()) {
                 if (layout.count > 1) {
                     PaneHeader(node.chat.title ?: "Chat", focused) { layout = layout.close(node.id) }
@@ -196,6 +249,9 @@ fun SplitScreen(
                             ProvideReplySpeakerFor(chatTarget) { pane(chatTarget, session.viewModel, false, focused, actions) }
                         }
                     }
+                    // A chat dragged in from the sidebar: the part of this pane it would take, and the chat itself.
+                    ChatDrag.zoneOver(node.id)?.let { zone -> DropHint(zone) }
+                    ChatDrag.chat?.let { held -> DragGhost(held, bounds[node.id]) }
                 }
             }
         }
@@ -205,6 +261,46 @@ fun SplitScreen(
 /** A pane waiting for a chat: the others' panes are named already, and "New chat" is not a choice of one. */
 private fun SplitNode.Pane.awaitsChat(blank: List<String>): Boolean =
     id != MAIN_PANE && id !in blank && chat.storedSessionId == null && chat.title == null
+
+/** The part of a pane a chat dropped on it would take: its middle, or the quarter along that edge. */
+@Composable
+private fun BoxScope.DropHint(zone: SplitDropZone) {
+    val at = when (zone) {
+        SplitDropZone.Center -> Modifier.fillMaxSize()
+        SplitDropZone.Left -> Modifier.fillMaxHeight().fillMaxWidth(DROP_EDGE_SHARE).align(Alignment.CenterStart)
+        SplitDropZone.Right -> Modifier.fillMaxHeight().fillMaxWidth(DROP_EDGE_SHARE).align(Alignment.CenterEnd)
+        SplitDropZone.Top -> Modifier.fillMaxWidth().fillMaxHeight(DROP_EDGE_SHARE).align(Alignment.TopCenter)
+        SplitDropZone.Bottom -> Modifier.fillMaxWidth().fillMaxHeight(DROP_EDGE_SHARE).align(Alignment.BottomCenter)
+    }
+    Box(at.background(Theme[colors][accentText].copy(alpha = 0.16f)).clearAndSetSemantics { })
+}
+
+/** The chat in the hand, under the pointer: the row that lifted out of the sidebar, see-through. */
+@Composable
+private fun DragGhost(held: DraggedChat, pane: Rect?) {
+    if (pane == null || held.position == Offset.Unspecified) return
+    Box(
+        Modifier
+            .offset {
+                IntOffset(
+                    (held.position.x - pane.left).roundToInt() + 8,
+                    (held.position.y - pane.top).roundToInt() - 24,
+                )
+            }
+            .widthIn(max = 200.dp)
+            .graphicsLayer { alpha = 0.85f }
+            .background(Theme[colors][surface], RoundedCornerShape(Theme[radii][radiusSmall]))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Text(
+            held.title ?: "Chat",
+            style = Theme[typography][bodySmall],
+            color = Theme[colors][text],
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 private fun ChatTarget.toPaneChat(): PaneChat = PaneChat(storedSessionId, title, profile)
 
