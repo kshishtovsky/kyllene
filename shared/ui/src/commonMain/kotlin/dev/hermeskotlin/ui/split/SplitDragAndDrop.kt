@@ -74,6 +74,12 @@ object ChatDrag {
     var beside by mutableStateOf<PaneChat?>(null)
         private set
 
+    /**
+     * Whether the focused pane has room to split. The split screen keeps it current; the sidebar leaves "Open beside"
+     * out while it is off, rather than offering a click that would do nothing.
+     */
+    var besideAllowed by mutableStateOf(true)
+
     private val panes = mutableMapOf<String, ChatDropTarget>()
 
     /** A row's long press: the chat comes out of the list, at no place until the pointer moves. */

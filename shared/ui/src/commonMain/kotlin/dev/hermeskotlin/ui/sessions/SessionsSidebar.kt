@@ -998,7 +998,12 @@ fun SessionsSidebar(
         onMakeThread = viewModel::makeThread.takeIf {
             actionTarget?.let { s -> !s.archived && threads.none { t -> t.holds(s) } } == true
         },
-        onOpenBeside = { ChatDrag.openBeside(PaneChat(it.id, it.displayTitle, null)) },
+        // The focused pane splits for it; with no room left the action is left out rather than doing nothing.
+        onOpenBeside = if (ChatDrag.besideAllowed) {
+            { ChatDrag.openBeside(PaneChat(it.id, it.displayTitle, null)) }
+        } else {
+            null
+        },
     )
     ThreadActionsSheet(
         row = threadActions,

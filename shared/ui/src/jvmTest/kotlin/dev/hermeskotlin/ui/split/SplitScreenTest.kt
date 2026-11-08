@@ -31,6 +31,7 @@ import androidx.lifecycle.ViewModelStore
 import com.composeunstyled.theme.ColorScheme
 import dev.hermeskotlin.core.auth.AuthApi
 import dev.hermeskotlin.core.auth.PersistentCookiesStorage
+import dev.hermeskotlin.core.bots.Bot
 import dev.hermeskotlin.core.bots.BotsApi
 import dev.hermeskotlin.core.cache.InMemoryOfflineDao
 import dev.hermeskotlin.core.cache.OfflineCache
@@ -73,6 +74,9 @@ import dev.hermeskotlin.ui.chat.ChatScreen
 import dev.hermeskotlin.ui.chat.ChatTarget
 import dev.hermeskotlin.ui.chat.ChatViewModel
 import dev.hermeskotlin.ui.chat.ReplySpeakerSource
+import dev.hermeskotlin.ui.chat.LocalReplySpeaker
+import dev.hermeskotlin.ui.chat.ProvideReplySpeaker
+import dev.hermeskotlin.ui.chat.ReplySpeaker
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.hermeskotlin.ui.di.CHAT_WINDOW
 import dev.hermeskotlin.ui.sessions.SessionsViewModel
@@ -284,6 +288,13 @@ class SplitScreenTest {
                         .testTag("split-$label")
                         .clickable { actions.split.onClick() },
                 )
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(40.dp)
+                        .testTag("new-$label")
+                        .clickable { actions.newChat() },
+                )
             }
         }
 
@@ -295,6 +306,28 @@ class SplitScreenTest {
         onNodeWithContentDescription("Split screen").assertIsEnabled()
         // The chat's own top bar is there above the composer, as before the split screen existed.
         onNodeWithText("Main").assertExists()
+    }
+
+    @Test
+    fun theAppsSpeakerStandsOverTheMainPanesReplies() = runSkikoComposeUiTest(Size(2600f, 800f)) {
+        val speakers = mutableMapOf<String, String?>()
+        setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides screenLifecycle) {
+                HermesTheme(ColorScheme.Dark) {
+                    Box(Modifier.fillMaxSize()) {
+                        // As the app provides it: the main pane is the app's own chat, the panes beside it name theirs.
+                        ProvideReplySpeaker(ReplySpeaker("Zeta", Bot(name = "zeta"), null)) {
+                            SplitScreen(target, mainChat, sessions, Modifier.fillMaxSize()) { paneTarget, _, _, _, _ ->
+                                speakers[paneTarget.title ?: "untitled"] = LocalReplySpeaker.current?.name
+                                Box(Modifier.fillMaxSize())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        waitForIdle()
+        assertEquals("Zeta", speakers["Main"], "The app's bot must stand over the main pane's replies")
     }
 
     @Test
@@ -324,6 +357,25 @@ class SplitScreenTest {
         onNodeWithTag("pane-Beta").assertExists()
         assertEquals(mapOf("Main" to false, "Beta" to true), panes.keys, "The chat's pane must be the focused one")
         assertEquals(mapOf("Main" to true, "Beta" to false), panes.main)
+    }
+
+    @Test
+    fun aPanesNewChatStartsAnEmptyChatInItsPlace() = runSkikoComposeUiTest(Size(2600f, 800f)) {
+        val panes = Panes()
+        setContent(content(spyPane(panes)))
+        waitForIdle()
+        onNodeWithTag("split-Main").performClick()
+        waitForIdle()
+        onNodeWithText("Beta").performClick()
+        waitForIdle()
+
+        onNodeWithTag("new-Beta").performClick()
+        waitForIdle()
+
+        // The pane drops the chat it showed for a blank one of its own, and keeps the focus.
+        onNodeWithTag("pane-Beta").assertDoesNotExist()
+        onNodeWithTag("pane-untitled").assertExists()
+        assertEquals(true, panes.keys["untitled"], "The pane's new chat keeps the focus")
     }
 
     @Test

@@ -201,7 +201,9 @@ fun SplitScreen(
 
     SplitContainer(
         layout = layout,
-        onResize = { branchId, fraction -> layout = layout.resize(branchId, fraction, minPaneDp = minPane) },
+        onResize = { branchId, fraction, containerDp ->
+            layout = layout.resize(branchId, fraction, containerDp = containerDp, minPaneDp = minPane)
+        },
         onReset = { branchId -> layout = layout.resize(branchId, 0.5f, minPaneDp = minPane) },
         modifier = modifier,
     ) { node ->
@@ -213,8 +215,14 @@ fun SplitScreen(
                 // A tap anywhere on the pane that its own controls didn't take makes it the focused one.
                 .pointerInput(node.id) { detectTapGestures { layout = layout.focus(node.id) } },
         ) {
-            val along = sizeAlong(node.id, axis)
-            SideEffect { sizes[node.id] = DpSize(maxWidth, maxHeight) }
+            // Read from the constraints, not from the map the panes write after composing: a map write doesn't
+            // recompose, and the split button would stay disabled until something else did.
+            val along = (if (axis == SplitAxis.Row) maxWidth else maxHeight).value
+            SideEffect {
+                sizes[node.id] = DpSize(maxWidth, maxHeight)
+                // The sidebar's "Open beside" splits the focused pane: it has nothing to offer without the room.
+                if (focused) ChatDrag.besideAllowed = canSplit(layout.count, along, minPane)
+            }
             DisposableEffect(node.id, target) {
                 ChatDrag.hold(node.id, ChatDropTarget({ bounds[node.id] ?: Rect.Zero }) { held, zone -> dropOn(node.id, held, zone) })
                 onDispose { ChatDrag.forget(node.id) }
@@ -226,7 +234,13 @@ fun SplitScreen(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     val actions = PaneActions(
                         split = SplitAction(canSplit(layout.count, along, minPane)) { splitPane(node.id) },
-                        newChat = { blankPanes = blankPanes + node.id },
+                        // A chat is open here and the pane starts another one in its place, as the main pane does:
+                        // the pane's own host takes the new chat over. Repeated on that fresh chat it has nothing
+                        // left to reset, so it does nothing: the layout's chat is blank already.
+                        newChat = {
+                            layout = layout.replace(node.id, PaneChat(null, null, profile)).focus(node.id)
+                            blankPanes = blankPanes + node.id
+                        },
                     )
                     when {
                         node.id == MAIN_PANE -> pane(target, mainChat, true, focused, actions)

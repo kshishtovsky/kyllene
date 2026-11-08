@@ -31,7 +31,7 @@ class SplitContainerTest {
     /** A 600×400 stage, the pane under test tagging itself so its bounds can be read. */
     private fun content(
         layout: SplitLayout,
-        onResize: (String, Float) -> Unit = { _, _ -> },
+        onResize: (String, Float, Float) -> Unit = { _, _, _ -> },
         onReset: (String) -> Unit = {},
         pane: @Composable (SplitNode.Pane) -> Unit = { p ->
             Box(Modifier.fillMaxSize().testTag("pane-${p.id}"))
@@ -94,13 +94,16 @@ class SplitContainerTest {
     fun draggingTheGripMovesTheLine() = runComposeUiTest {
         val layout = SplitLayout.single("p1").split("p1", SplitAxis.Row, "p2")!!
         val fractions = mutableListOf<Float>()
-        setContent(content(layout, onResize = { _, f -> fractions += f }))
+        val stages = mutableListOf<Float>()
+        setContent(content(layout, onResize = { _, f, containerDp -> fractions += f; stages += containerDp }))
         onNodeWithTag("stage").performTouchInput {
             swipe(start = percentOffset(0.5f, 0.5f), end = percentOffset(0.75f, 0.5f), durationMillis = 200)
         }
         waitForIdle()
         assertTrue(fractions.isNotEmpty(), "A drag over the grip must report the new share")
         assertTrue(abs(fractions.last() - 0.5f) > 0.05f, "The share moved, but only as far as ${fractions.last()}")
+        // The share is clamped to the panes' minimums, which needs the width the two of them share.
+        assertEquals(600f, stages.last(), "The drag must report the stage it moves the line across")
     }
 
     @Test
@@ -119,7 +122,7 @@ class SplitContainerTest {
         setContent(
             content(
                 layout,
-                onResize = { id, f -> layout = layout.resize(id, f) },
+                onResize = { id, f, _ -> layout = layout.resize(id, f) },
                 pane = { p ->
                     calls[p.id] = (calls[p.id] ?: 0) + 1
                     Box(Modifier.fillMaxSize().testTag("pane-${p.id}"))

@@ -41,7 +41,7 @@ private val SplitLine = 1.dp
 @Composable
 fun SplitContainer(
     layout: SplitLayout,
-    onResize: (branchId: String, fraction: Float) -> Unit,
+    onResize: (branchId: String, fraction: Float, containerDp: Float) -> Unit,
     onReset: (branchId: String) -> Unit,
     modifier: Modifier = Modifier,
     pane: @Composable (SplitNode.Pane) -> Unit,
@@ -52,7 +52,7 @@ fun SplitContainer(
 @Composable
 private fun SplitNodeView(
     node: SplitNode,
-    onResize: (branchId: String, fraction: Float) -> Unit,
+    onResize: (branchId: String, fraction: Float, containerDp: Float) -> Unit,
     onReset: (branchId: String) -> Unit,
     pane: @Composable (SplitNode.Pane) -> Unit,
 ) {
@@ -66,7 +66,7 @@ private fun SplitNodeView(
 @Composable
 private fun SplitBranch(
     branch: SplitNode.Branch,
-    onResize: (branchId: String, fraction: Float) -> Unit,
+    onResize: (branchId: String, fraction: Float, containerDp: Float) -> Unit,
     onReset: (branchId: String) -> Unit,
     pane: @Composable (SplitNode.Pane) -> Unit,
 ) {
@@ -100,12 +100,14 @@ private fun SplitBranch(
 private fun SplitGrip(
     branch: SplitNode.Branch,
     size: Dp,
-    onResize: (branchId: String, fraction: Float) -> Unit,
+    onResize: (branchId: String, fraction: Float, containerDp: Float) -> Unit,
     onReset: (branchId: String) -> Unit,
 ) {
     val row = branch.axis == SplitAxis.Row
     val fraction by rememberUpdatedState(branch.fraction)
     val sizePx by rememberUpdatedState(with(LocalDensity.current) { size.toPx() })
+    // The branch's size along its axis, as the screen clamps a share to its panes' minimums.
+    val containerDp by rememberUpdatedState(size.value)
     val grab = if (row) Modifier.fillMaxHeight().width(SplitGrip).offset(x = size * fraction - SplitGrip / 2)
     else Modifier.fillMaxWidth().height(SplitGrip).offset(y = size * fraction - SplitGrip / 2)
     Box(
@@ -120,7 +122,7 @@ private fun SplitGrip(
                     onDrag = { change, drag ->
                         change.consume()
                         at += if (row) drag.x else drag.y
-                        onResize(branch.id, at / sizePx)
+                        onResize(branch.id, at / sizePx, containerDp)
                     },
                 )
             },
