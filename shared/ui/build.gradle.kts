@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kover)
 }
 
 kotlin {
@@ -80,6 +81,13 @@ kotlin {
 
 // Lint only ever gets this module's test sources, and the app's lint ignores those (see androidApp).
 tasks.matching { it.name == "lintAnalyzeAndroidHostTest" }.configureEach { enabled = false }
+
+// Only the desktop target is measured: the Android host tests run without coverage instrumentation.
+kover {
+    currentProject {
+        instrumentation { disabledForTestTasks.add("testAndroidHostTest") }
+    }
+}
 
 // `-Drtl.geometry=<dir>` asks the RTL layout tests to write their geometry and pixels there.
 providers.systemProperty("rtl.geometry").orNull?.let { dir ->

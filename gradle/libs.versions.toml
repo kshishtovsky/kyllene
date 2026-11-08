@@ -41,6 +41,8 @@ android-wear-minSdk = "30"
 # Rendered Compose layout tests on the Android host. Test-only: no production code or SDK changes.
 robolectric = "4.17"
 junit4 = "4.13.2"
+# Coverage on the JVM target: line counters per package, no build-blocking threshold yet.
+kover = "0.9.11"
 
 android-compileSdk = "37"
 # Compose 1.13 and A2UI need 37.1.
@@ -163,3 +165,4 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 room = { id = "androidx.room", version.ref = "room" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
